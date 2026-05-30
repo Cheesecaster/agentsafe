@@ -21,7 +21,8 @@ classifiers = [
 [project.optional-dependencies]
 x402 = ["web3>=6.0", "eth-account>=0.9"]
 cli = ["rich>=13.0", "click>=8.0"]
-full = ["agentsafe[x402,cli]"]
+api = ["flask>=3.0"]
+full = ["agentsafe[x402,cli,api]"]
 
 [project.scripts]
 agentsafe = "agentsafe.cli:main"
