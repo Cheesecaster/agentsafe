@@ -12,35 +12,40 @@ from agentsafe import (
 
 
 def test_budget_guard_daily_reset():
-    guard = BudgetGuard(daily_limit=0.50)
-    assert guard.check(0.30)
-    guard.record(0.30)
-    assert guard.remaining == 0.20
-    assert not guard.check(0.25)
-    guard.record(0.20)
-    assert guard.spent_today == 0.50
+    with tempfile.TemporaryDirectory() as tmpdir:
+        guard = BudgetGuard(daily_limit=0.50, storage_path=os.path.join(tmpdir, "budget.json"))
+        assert guard.check(0.30)
+        guard.record(0.30)
+        assert guard.remaining == 0.20
+        assert not guard.check(0.25)
+        guard.record(0.20)
+        assert abs(guard.spent_today - 0.50) < 0.001
 
 
 def test_trust_registry_auto_promote():
-    reg = TrustRegistry(allowlist=["trusted-1"], blocklist=["bad-actor"])
-    assert reg.check("trusted-1") == "TRUSTED"
-    assert reg.check("bad-actor") == "BLOCKED"
-    assert reg.check("new-guy") == "UNKNOWN"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        reg = TrustRegistry(
+            allowlist=["trusted-1"], blocklist=["bad-actor"],
+            storage_path=os.path.join(tmpdir, "trust.json")
+        )
+        assert reg.check("trusted-1") == "TRUSTED"
+        assert reg.check("bad-actor") == "BLOCKED"
+        assert reg.check("new-guy") == "UNKNOWN"
 
-    # Simulate 5 successful interactions
-    for _ in range(5):
-        reg.add_interaction("new-guy", success=True)
-    assert reg.check("new-guy") == "TRUSTED"
+        for _ in range(5):
+            reg.add_interaction("new-guy", success=True)
+        assert reg.check("new-guy") == "TRUSTED"
 
 
 def test_anomaly_guard_tracking():
-    guard = AnomalyGuard(multiplier=3.0)
-    now = time.time()
-    guard.record(now, 0.05)
-    guard.record(now, 0.05)
-    avg = guard.hourly_average(time.gmtime(now).tm_hour)
-    assert avg > 0
-    assert guard.count_last_hour() == 2
+    with tempfile.TemporaryDirectory() as tmpdir:
+        guard = AnomalyGuard(multiplier=3.0, storage_path=os.path.join(tmpdir, "anomaly.json"))
+        now = time.time()
+        guard.record(now, 0.05)
+        guard.record(now, 0.05)
+        avg = guard.hourly_average(time.gmtime(now).tm_hour)
+        assert avg > 0
+        assert guard.count_last_hour() == 2
 
 
 def test_time_lock_quiet_hours():
