@@ -11,8 +11,8 @@ class BehaviorHash:
     If any of these change at runtime, the hash no longer matches and
     the agent is flagged for review.
 
-    This is adapted from brain.fi's behaviorHash approach but simplified
-    for agent-level implementation.
+    This prevents silent model swaps, prompt injection, or tool changes
+    that could alter agent behavior after deployment.
     """
 
     def __init__(self, registered_hash: str | None = None):

@@ -284,24 +284,7 @@ if result.status == "APPROVED":
 
 ---
 
-## Comparison: agentsafe vs brain.fi
 
-| Feature | brain.fi | agentsafe |
-|---------|----------|-----------|
-| **Pre-execution gate** | ✅ 22 checks | ✅ 6 core guards |
-| **Behavior pinning** | ✅ behaviorHash | ✅ behaviorHash |
-| **Spending limits** | ✅ Smart Account caps | ✅ Daily budget cap |
-| **Audit trail** | ✅ Merkle on Base | ✅ Hash-chain JSONL |
-| **Kill switch** | ✅ Atomic halt | ✅ Pause/resume |
-| **Escrow** | ✅ BrainEscrow | ✅ (planned) |
-| **x402 integration** | ✅ Native | ✅ Native |
-| **Target audience** | Enterprise banks | Devs, indie hackers |
-| **Setup complexity** | Full platform deploy | `pip install` + 3 lines |
-| **Memory layer** | Wiki (unbounded) | Ebbinghaus decay (compressed) |
-| **Agent autonomy** | API-driven proposers | Genuinely autonomous agents |
-
-**brain.fi** = "Build a full enterprise finance platform."
-**agentsafe** = "Add safety to your agent in 3 lines."
 
 ---
 
