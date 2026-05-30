@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentsafe"
+version = "0.1.0"
+description = "The seatbelt for autonomous agents that spend money via x402"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.12"
+authors = [{ name = "TomKet", email = "tomket@example.com" }]
+keywords = ["x402", "agent", "safety", "base", "usdc", "budget", "autonomous"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Security",
+]
+
+[project.optional-dependencies]
+x402 = ["web3>=6.0", "eth-account>=0.9"]
+cli = ["rich>=13.0", "click>=8.0"]
+full = ["agentsafe[x402,cli]"]
+
+[project.scripts]
+agentsafe = "agentsafe.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
