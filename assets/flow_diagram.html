@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>agentsafe — Architecture Flow</title>
+<style>
+  :root {
+    --base-blue: #0052FF;
+    --base-blue-light: #E6F0FF;
+    --base-dark: #0A0B0D;
+    --base-gray: #64748B;
+    --base-border: #E2E8F0;
+    --white: #FFFFFF;
+    --shadow: 0 4px 20px rgba(0, 82, 255, 0.08);
+    --shadow-hover: 0 8px 30px rgba(0, 82, 255, 0.15);
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    background: #F8FAFC;
+    color: var(--base-dark);
+    padding: 40px 20px;
+    min-height: 100vh;
+  }
+  .header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  .header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: var(--base-dark);
+  }
+  .header h1 span { color: var(--base-blue); }
+  .header p { color: var(--base-gray); margin-top: 8px; font-size: 16px; }
+  .flow-container {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    flex-wrap: wrap;
+  }
+  .card {
+    background: var(--white);
+    border: 1px solid var(--base-border);
+    border-radius: 16px;
+    padding: 28px 24px;
+    width: 200px;
+    text-align: center;
+    box-shadow: var(--shadow);
+    transition: all 0.3s ease;
+    position: relative;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeUp 0.6s ease forwards;
+  }
+  .card:hover { transform: translateY(-4px); box-shadow: var(--shadow-hover); border-color: var(--base-blue); }
+  .card:nth-child(1) { animation-delay: 0.1s; }
+  .card:nth-child(3) { animation-delay: 0.3s; }
+  .card:nth-child(5) { animation-delay: 0.5s; }
+  .card:nth-child(7) { animation-delay: 0.7s; }
+  .card-icon { font-size: 40px; margin-bottom: 12px; display: block; }
+  .card h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .card p { font-size: 13px; color: var(--base-gray); line-height: 1.4; }
+  .card.highlight { border: 2px solid var(--base-blue); background: var(--base-blue-light); }
+  .card.highlight:hover { box-shadow: 0 8px 30px rgba(0, 82, 255, 0.25); }
+  .arrow {
+    width: 60px;
+    height: 2px;
+    background: var(--base-blue);
+    position: relative;
+    opacity: 0;
+    animation: fadeIn 0.5s ease forwards;
+  }
+  .arrow:nth-child(2) { animation-delay: 0.2s; }
+  .arrow:nth-child(4) { animation-delay: 0.4s; }
+  .arrow:nth-child(6) { animation-delay: 0.6s; }
+  .arrow::after {
+    content: '';
+    position: absolute;
+    right: -6px;
+    top: -5px;
+    width: 12px;
+    height: 12px;
+    border-right: 2px solid var(--base-blue);
+    border-top: 2px solid var(--base-blue);
+    transform: rotate(45deg);
+  }
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fadeIn {
+    to { opacity: 0.6; }
+  }
+  .badge {
+    position: absolute;
+    top: -10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--base-blue);
+    color: white;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 3px 8px;
+    border-radius: 10px;
+  }
+  @media (max-width: 860px) {
+    .flow-container { flex-direction: column; gap: 0; }
+    .arrow {
+      width: 2px;
+      height: 40px;
+      flex-direction: column;
+    }
+    .arrow::after {
+      right: -5px;
+      top: auto;
+      bottom: -6px;
+      transform: rotate(135deg);
+    }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <h1><img src="agentsafe_logo.svg" width="36" style="vertical-align: middle; margin-right: 8px;" alt="">
+    <span style="vertical-align: middle;">agent</span>safe</h1>
+    <p>How an Agent Payment Request Flow Works</p>
+  </div>
+  <div class="flow-container">
+    <!-- Step 1 -->
+    <div class="card">
+      <span class="card-icon">🤖</span>
+      <h3>Agent Request</h3>
+      <p>AI Agent calls an external API that requires x402 payment.</p>
+    </div>
+    <div class="arrow"></div>
+    <!-- Step 2 -->
+    <div class="card highlight">
+      <div class="badge">SDK</div>
+      <span class="card-icon">🛡️</span>
+      <h3>agentsafe SDK</h3>
+      <p>Intercepts request. Checks local cache. Calls Cloud API.</p>
+    </div>
+    <div class="arrow"></div>
+    <!-- Step 3 -->
+    <div class="card">
+      <div class="badge">CLOUD API</div>
+      <span class="card-icon">☁️</span>
+      <h3>Cloud Check</h3>
+      <p>Budget, Trust, Anomaly & KillSwitch gates evaluate.</p>
+    </div>
+    <div class="arrow"></div>
+    <!-- Step 4 -->
+    <div class="card">
+      <span class="card-icon">🔗</span>
+      <h3>Blockchain</h3>
+      <p>EIP-3009 transfer signed. USDC settled on Base Mainnet.</p>
+    </div>
+  </div>
+</body>
+</html>
