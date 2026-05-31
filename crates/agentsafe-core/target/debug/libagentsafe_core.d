@@ -1,0 +1,1 @@
+/home/hermeswebui/.hermes/workspace/agentsafe/crates/agentsafe-core/target/debug/libagentsafe_core.rlib: /home/hermeswebui/.hermes/workspace/agentsafe/crates/agentsafe-core/src/budget.rs /home/hermeswebui/.hermes/workspace/agentsafe/crates/agentsafe-core/src/lib.rs /home/hermeswebui/.hermes/workspace/agentsafe/crates/agentsafe-core/src/merkle.rs
