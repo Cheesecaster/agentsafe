@@ -4,23 +4,17 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/agentsafe.svg)](https://pypi.org/project/agentsafe/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.20-363636.svg)](https://soliditylang.org/)
+[![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Base Mainnet](https://img.shields.io/badge/Network-Base%20(8453)-0052ff.svg)](https://base.org/)
 **v0.5.0 — SaaS Middleware SDK**
 
 ---
 
 `agentsafe` is a drop-in **safety middleware** for AI agents that pay for resources via **x402 micropayments**.
-Instead of building complex blockchain logic, simply connect your agent to Agentsafe. We handle the budget enforcement, trust verification, and audit trails in real-time.
+Instead of building complex blockchain logic, simply connect your agent to Agentsafe. We handle budget enforcement, trust verification, and audit trails in real-time.
 
 **Stop worrying about runaway agents. Start building.**
-
-## 🚀 Why Agentsafe?
-AI Agents need wallets to pay for APIs (via x402), but that's dangerous:
-- 📉 **Runaway Spend**: An agent loops 1,000 times → wallet drained in seconds.
-- 🐛 **Prompt Injection**: A malicious site tricks the agent into draining funds.
-- 👀 **No Visibility**: You don't know what your agent bought until the bill hits.
-
-**Agentsafe** acts as the **guardrail**. It intercepts every payment request, checks your policies, and only approves safe transactions.
 
 ## ⚡ Quick Start (SaaS Mode)
 No smart contract deployment needed. No gas fees to manage.
@@ -51,15 +45,51 @@ response = agent.get(
 print(response.json())
 ```
 
-## 🛡️ What We Handle (The "Invisible" Layer)
+## 🚀 Philosophy: Every Base MCP Agent Needs Its Own Wallet
+Base is pushing a future where **every AI Agent has its own on-chain identity and wallet**.
+This is powerful, but dangerous without safety rails:
+- 🐇 **True Autonomy**: Agents should pay for their own compute/data via x402 without asking permission for every $0.05.
+- 🛑 **The "Runaway" Risk**: An agent with a wallet and no limits is a liability. One loop error = drained funds. One prompt injection = stolen assets.
 
-When your agent calls `agent.get()`, Agentsafe Cloud performs:
+**`agentsafe` bridges this gap.** 
+It provides the **safety kit** that makes independent Agent Wallets viable for production. We ensure agents stay within budget, behave normally, and can be stopped instantly—so developers can trust their MCP agents to transact autonomously on Base.
 
-1. **🔒 Budget Guard**: Checks daily limit (e.g. $20/day). Rejects excess instantly.
-2. **🛡️ Trust Check**: Validates domains against your whitelist. Blocks phishing URLs.
-3. **🧠 Anomaly Detection**: Spends spikes (e.g., $0.05 -> $50.00) trigger an auto-block.
-4. **🛑 Kill Switch**: Kill your agent's spending power from the Dashboard in 1 click.
-5. **📝 Merkle Audit**: Every approved/denied action is logged on-chain verifiably.
+## 🛡️ Under the Hood: Enterprise-Grade Architecture
+We blend **Python flexibility** with **Rust performance** and **Solidity enforcement**.
+
+### 1. 🧠 Python Guard Core
+Deterministic safety policy engine running <1ms checks:
+- `BudgetGuard`: Enforces daily/total spend limits (e.g., $20/day).
+- `TrustRegistry`: Whitelists verified x402 endpoints.
+- `AnomalyGuard`: Detects spending velocity spikes (3σ deviation).
+- `TimeLock`: Prevents burst spending; enforces cool-downs.
+
+### 2. 🌳 Merkle Audit Chain (v0.4.0)
+Enterprise-grade verification (inspired by Layer 6 Financial protocols):
+- Every agent action is logged in a **Merkle Tree**.
+- The **Merkle Root** is available on-chain, making logs tamper-proof.
+- Changing a single log entry invalidates the root hash: **Immediate fraud detection**.
+
+### 3. 🛡️ Formal Safety Proofs
+Before an x402 payment is released, agentsafe generates a **Signed Safety Proof**:
+```json
+{
+  "agent_id": "agent_0x123",
+  "checks": { "budget_ok": true, "trust_verified": true },
+  "merkle_root": "0x789...",
+  "signature": "0xdead..."
+}
+```
+This proof is attached to the x402 transaction, satisfying high-compliance environments.
+
+### 4. 🤝 Smart Contracts (On-Chain Enforcement)
+Gas-optimized contracts for Base Mainnet:
+- `SessionGuard.sol`: Non-custodial session mgmt + daily limits. `ReentrancyGuard` + `SafeERC20` + `deposit/withdraw`.
+- `EscrowSimple.sol`: x402 escrow with buyer-release, timeout-refund, and **seller auto-claim** fallback.
+- `AgentRegistry.sol`: DID-style identity with trust scores (0-100) and metadata.
+
+### 5. ⚡ Rust Core (`crates/agentsafe-core/`)
+Zero-cost abstractions for high-frequency loops. Guards ported to Rust for <100ns latency and zero allocation.
 
 ## 🧩 Integrations
 
@@ -71,33 +101,22 @@ We support multiple ways to integrate:
 | **Claude Desktop / Cursor** | MCP Server Config | `mcpServers` JSON snippet |
 | **API / Webhooks** | REST API (JWT Auth) | Coming Soon |
 
-## 🏗️ Architecture (Under the Hood)
-
-Your agent talks to our **SDK**, which communicates with **Agentsafe Cloud**.
-Agentsafe Cloud then settles payments on **Base Mainnet** via **x402 contracts**.
-
-```text
-[ Agent Code ]
-      │
-      ▼ (Intercept Request)
-[ agentsafe SDK ] ◄───── 1. Check Local Cache
-      │                      2. If needed, call API
-      ▼
-[ Agentsafe Cloud ] ◄─── Safety Logic + Relayer (Base Chain)
-      │                      • BudgetCheck
-      │                      • TrustRegistry
-      │                      • KillSwitch Status
-      ▼
-[ External API (x402) ] ◄─ Settlement via USDC on Base
-```
-
 ## 🧪 Development
 ```bash
 git clone https://github.com/Cheesecaster/agentsafe.git
 cd agentsafe
 pip install -e ".[dev]"
-pytest  # Run 27 E2E & Unit Tests
+make test  # Run 27 E2E & Unit Tests
 ```
+
+## 🗺️ Roadmap
+- [x] **v0.1.0:** Python Guard Core.
+- [x] **v0.2.0:** Web Dashboard & API.
+- [x] **v0.3.0:** x402 Client & Base Contracts.
+- [x] **v0.4.0:** Merkle Audit & Formal Proofs.
+- [x] **v0.4.1:** Base MCP Server.
+- [x] **v0.5.0:** Contract optimization (storage packing, SafeERC20) + SaaS SDK focus.
+- [ ] **v0.6.0:** Rust Core PyO3 bindings & Base Mainnet live deployment.
 
 ## 📄 License
 MIT
