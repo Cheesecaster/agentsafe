@@ -1,176 +1,103 @@
 # agentsafe
 
-**Autonomous Agent Safety Kit for x402 Payments & Base Mainnet**
+**The Invisible Safety Layer for Autonomous AI Agents.**
 
+[![PyPI version](https://img.shields.io/pypi/v/agentsafe.svg)](https://pypi.org/project/agentsafe/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
-[![Solidity](https://img.shields.io/badge/Solidity-0.8.20-363636.svg)](https://soliditylang.org/)
-[![Base Mainnet](https://img.shields.io/badge/Network-Base%20Mainnet-0052ff.svg)](https://base.org/)
-**v0.5.0 — Production Deployment Ready**
+[![Base Mainnet](https://img.shields.io/badge/Network-Base%20(8453)-0052ff.svg)](https://base.org/)
+**v0.5.0 — SaaS Middleware SDK**
 
 ---
 
-`agentsafe` is a drop-in safety layer for autonomous AI agents performing **x402 micropayments**.
-It provides **budget caps, trust verification, anomaly detection, and cryptographic audit trails** without requiring enterprise bloatware.
+`agentsafe` is a drop-in **safety middleware** for AI agents that pay for resources via **x402 micropayments**.
+Instead of building complex blockchain logic, simply connect your agent to Agentsafe. We handle the budget enforcement, trust verification, and audit trails in real-time.
 
-Built for the **Base Agent Economy**.
+**Stop worrying about runaway agents. Start building.**
 
-## 🚀 The Philosophy: Every Base MCP Agent Needs Its Own Wallet
-Base is pushing a future where **every AI Agent has its own on-chain identity and wallet**.
-This is powerful, but dangerous without safety rails:
-- 🐇 **True Autonomy**: Agents should pay for their own compute/data via x402 without asking permission for every $0.05.
-- 🛑 **The "Runaway" Risk**: An agent with a wallet and no limits is a liability. One loop error = drained funds. One prompt injection = stolen assets.
-- 🕳️ **The Gap**: Giving an agent a wallet is easy. Giving it **financial discipline** is hard.
+## 🚀 Why Agentsafe?
+AI Agents need wallets to pay for APIs (via x402), but that's dangerous:
+- 📉 **Runaway Spend**: An agent loops 1,000 times → wallet drained in seconds.
+- 🐛 **Prompt Injection**: A malicious site tricks the agent into draining funds.
+- 👀 **No Visibility**: You don't know what your agent bought until the bill hits.
 
-**`agentsafe` bridges this gap.** 
-It provides the **safety kit** that makes independent Agent Wallets viable for production. We ensure agents stay within budget, behave normally, and can be stopped instantly—so developers can trust their MCP agents to transact autonomously on Base.
+**Agentsafe** acts as the **guardrail**. It intercepts every payment request, checks your policies, and only approves safe transactions.
 
-## 🛡️ Architecture
+## ⚡ Quick Start (SaaS Mode)
+No smart contract deployment needed. No gas fees to manage.
 
-We blend **Python flexibility** with **Rust performance** and **Solidity enforcement**.
+### 1. Get API Key
+Sign up at [app.agentsafe.com](https://app.agentsafe.com) and create an Agent profile.
+Set your limits (e.g., "$5/day") and whitelist domains.
 
-### 1. 🧠 Python Guard Core (`src/agentsafe/guard/`)
-Deterministic safety policy engine running <1ms checks:
-- `BudgetGuard`: Enforces daily/total spend limits (e.g., $20/day).
-- `TrustRegistry`: Whitelists verified x402 endpoints.
-- `AnomalyGuard`: Detects spending velocity spikes (3σ deviation).
-- `TimeLock`: Prevents burst spending; enforces cool-downs between transactions.
-- `BehaviorHash`: Verifies agent "intent stability" before release.
-- `KillSwitch`: Immediate session revocation by the owner.
-
-### 2. 🌳 Merkle Audit Chain (v0.4.0)
-Enterprise-grade verification (inspired by Layer 6 Financial protocols):
-- Every agent action is logged in a **Merkle Tree**.
-- The **Merkle Root** is available on-chain, making logs tamper-proof.
-- Changing a single log entry invalidates the root hash: **Immediate fraud detection**.
-
-### 3. 🛡️ Formal Safety Proofs (v0.4.0)
-Before an x402 payment is released, agentsafe generates a **Signed Safety Proof**:
-```json
-{
-  "agent_id": "agent_0x123",
-  "intent_hash": "0xabc...",
-  "checks": {
-    "budget_ok": true,
-    "trust_verified": true,
-    "anomaly_score": 0.02
-  },
-  "merkle_root": "0x789...",
-  "signature": "0xdead..."
-}
-```
-This proof is attached to the x402 transaction, satisfying high-compliance environments.
-
-### 4. 🤝 Smart Contracts (`contracts/`)
-On-chain enforcement on Base Mainnet (Gas-optimized, storage-packed):
-- `SessionGuard.sol`: Non-custodial session mgmt + daily limits. `ReentrancyGuard` + `SafeERC20` + `deposit/withdraw` for fund management.
-- `EscrowSimple.sol`: x402 escrow with buyer-release, timeout-refund, and **seller auto-claim** fallback.
-- `AgentRegistry.sol`: DID-style identity with trust scores (0-100) and metadata (IPFS/Arweave refs).
-
-### 5. ⚡ Rust Core (`crates/agentsafe-core/`)
-Zero-cost abstractions for high-frequency loops. Guards ported to Rust for <100ns latency and zero allocation.
-
-### 6. 🌐 Web Dashboard
-- Connect Base wallet (MetaMask/WalletConnect).
-- Live monitor of agent sessions, spend, and health.
-- **Live Kill Switch** and limit adjustment directly from UI.
-
-### Base MCP Integration
-
-Connect `agentsafe` to any MCP-compatible agent (Claude Desktop, Base Agents, Cursor):
-
-```bash
-# Install MCP server
-pip install agentsafe[mcp]
-
-# Run as MCP server (stdio mode)
-agentsafe-mcp
-
-# Or use npx for Claude Desktop
-npx mcp install agentsafe
-```
-
-Agents connecting via MCP automatically get access to 4 safety tools:
-| Tool | Description |
-|------|-------------|
-| `create_session` | Set budget limits, whitelist, cooldowns |
-| `check_budget` | Validate spend before execution |
-| `kill_session` | Emergency revocation (Kill Switch) |
-| `audit_log` | View Merkle Audit Root & history |
-
-## 💻 Usage
-
-### Installation
+### 2. Install SDK
 ```bash
 pip install agentsafe
-# or from source
-git clone https://github.com/Cheesecaster/agentsafe.git
-cd agentsafe && pip install -e .
 ```
 
-### Python Example
+### 3. Integrate (1 Line of Code)
 ```python
-from agentsafe.safe_agent import SafeAgent
-from agentsafe.guard import BudgetGuard, TrustRegistry, AnomalyGuard
+from agentsafe import AgentsafeClient
 
-# 1. Initialize Guards
-budget = BudgetGuard(daily_limit_usdc=20.0)  # $20/day cap
-trust = TrustRegistry(whitelist=["api.openai.com"])
-anomaly = AnomalyGuard()
+# Initialize with your Dashboard API Key
+agent = AgentsafeClient(api_key="sk-age-...")
 
-# 2. Create Safe Agent
-agent = SafeAgent(
-    name="trader-bot",
-    guards=[budget, trust, anomaly],
-    wallet="0xYourBaseWallet"
+# Wrap your API requests.
+# Agentsafe blocks unauthorized payments automatically.
+response = agent.get(
+    url="https://api.openai.com/v1/chat/completions",
+    max_spend_usd=0.05
 )
 
-# 3. Run with Safety
-status = agent.check_safety(
-    target="api.openai.com",
-    amount_usdc=5.00
-)
-
-if status.allowed:
-    print(f"✅ Approved. Remaining Daily: ${status.remaining}")
-else:
-    print(f"🚫 Denied: {status.reason}")
+print(response.json())
 ```
 
-### Deploy to Base Mainnet
-```bash
-cp .env.example .env  # Add your private key
-python scripts/deploy.py base
-```
-Deploys `SessionGuard`, `EscrowSimple`, and `AgentRegistry` to Base Mainnet with optimized bytecode.
+## 🛡️ What We Handle (The "Invisible" Layer)
 
-### Run as MCP Server
-```bash
-pip install agentsafe[mcp]
-python -m agentsafe.mcp.server
+When your agent calls `agent.get()`, Agentsafe Cloud performs:
+
+1. **🔒 Budget Guard**: Checks daily limit (e.g. $20/day). Rejects excess instantly.
+2. **🛡️ Trust Check**: Validates domains against your whitelist. Blocks phishing URLs.
+3. **🧠 Anomaly Detection**: Spends spikes (e.g., $0.05 -> $50.00) trigger an auto-block.
+4. **🛑 Kill Switch**: Kill your agent's spending power from the Dashboard in 1 click.
+5. **📝 Merkle Audit**: Every approved/denied action is logged on-chain verifiably.
+
+## 🧩 Integrations
+
+We support multiple ways to integrate:
+
+| Platform | Integration Method | Docs |
+|---|---|---|
+| **Python (LangChain, CrewAI)** | `pip install agentsafe` | [Python SDK](examples/basic_usage.py) |
+| **Claude Desktop / Cursor** | MCP Server Config | `mcpServers` JSON snippet |
+| **API / Webhooks** | REST API (JWT Auth) | Coming Soon |
+
+## 🏗️ Architecture (Under the Hood)
+
+Your agent talks to our **SDK**, which communicates with **Agentsafe Cloud**.
+Agentsafe Cloud then settles payments on **Base Mainnet** via **x402 contracts**.
+
+```text
+[ Agent Code ]
+      │
+      ▼ (Intercept Request)
+[ agentsafe SDK ] ◄───── 1. Check Local Cache
+      │                      2. If needed, call API
+      ▼
+[ Agentsafe Cloud ] ◄─── Safety Logic + Relayer (Base Chain)
+      │                      • BudgetCheck
+      │                      • TrustRegistry
+      │                      • KillSwitch Status
+      ▼
+[ External API (x402) ] ◄─ Settlement via USDC on Base
 ```
-Exposes `create_session`, `check_budget`, `kill_session`, and `audit_log` to any MCP-compatible agent.
 
 ## 🧪 Development
 ```bash
-make test       # Run unit + E2E tests (27 tests)
-make test-e2e   # E2E flow only
-make deploy     # Deploy to Base Mainnet
-make deploy-local # Deploy to local Anvil
+git clone https://github.com/Cheesecaster/agentsafe.git
+cd agentsafe
+pip install -e ".[dev]"
+pytest  # Run 27 E2E & Unit Tests
 ```
-
-## 🗺️ Roadmap
-- [x] **v0.1.0:** Python Guard Core.
-- [x] **v0.2.0:** Web Dashboard & API.
-- [x] **v0.3.0:** x402 Client & Base Contracts.
-- [x] **v0.4.0:** Merkle Audit & Formal Proofs.
-- [x] **v0.4.1:** Base MCP Server.
-- [x] **v0.5.0:** Contract optimization (storage packing, SafeERC20, ReentrancyGuard) + Deploy script + E2E suite.
-- [ ] **v0.6.0:** Rust Core PyO3 bindings & Base Mainnet live deployment.
-
-## 🤝 Contributing
-PRs welcome. Focus on deterministic safety logic and Base Mainnet integration.
 
 ## 📄 License
 MIT
