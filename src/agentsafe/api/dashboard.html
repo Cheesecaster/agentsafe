@@ -124,6 +124,17 @@
                 <button class="btn btn-danger" onclick="revokeAgent()">⛔ Kill Switch</button>
             </div>
         </div>
+
+        <!-- Merkle Root / Audit -->
+        <div class="card">
+            <div class="card-label">Audit Merkle Root</div>
+            <div id="merkleRootHash" style="font-family: var(--font-mono); font-size: 11px; color: var(--gray-600); background: var(--gray-100); padding: 8px; border-radius: 4px; word-break: break-all; min-height: 40px; line-height: 1.4; margin-top: 8px;">
+                Computing root...
+            </div>
+            <div class="card-sub" style="margin-top: 4px;">
+                <span id="auditEntriesCount">0</span> entries logged & verified
+            </div>
+        </div>
     </div>
 
     <!-- Audit Table -->
@@ -270,15 +281,18 @@
     // ── Local Audit Data Loading ──────────────────────────────────────────────
     async function renderAudit() {
         try {
-            // In v0.3, dashboard pulls from /api/v1/audit/24
             const res = await fetch('./api/v1/audit/24');
             const data = await res.json();
             
-            const container = document.getElementById('auditRows');
-            if (!data.entries || data.entries.length === 0) {
-                container.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--gray-600);">No recent transactions in local log.</div>';
-                return;
+            // Update Merkle Root
+            if (data.merkle_root) {
+                document.getElementById('merkleRootHash').innerText = "0x" + data.merkle_root.substring(0, 24) + "...";
             }
+            if (data.count !== undefined) {
+                document.getElementById('auditEntriesCount').innerText = data.count;
+            }
+            
+            const container = document.getElementById('auditRows');
 
             container.innerHTML = data.entries.slice(-10).reverse().map(e => {
                 const ts = new Date(e.ts * 1000).toLocaleTimeString();

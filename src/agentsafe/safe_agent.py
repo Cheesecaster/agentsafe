@@ -15,6 +15,7 @@ from .guard.time_lock import TimeLock
 from .guard.behavior import BehaviorHash
 from .guard.kill_switch import KillSwitch
 from .guard.audit_chain import AuditChain
+from .guard.proof import SafetyProofGenerator
 
 
 @dataclass
@@ -25,6 +26,7 @@ class SpendResult:
     remaining_budget: str
     risk_score: float = 0.0
     payment_header: Optional[str] = None
+    safety_proof: Optional[Dict[str, Any]] = None
 
 
 class SafeAgent:
@@ -78,6 +80,7 @@ class SafeAgent:
         self.behavior = BehaviorHash(registered_hash=behavior_hash)
         self.kill_switch = KillSwitch(storage / "kill_switch.json")
         self.audit = AuditChain(storage / "audit.jsonl")
+        self.proof_gen = SafetyProofGenerator()
 
         self.on_escalate = on_escalate
 
@@ -149,12 +152,14 @@ class SafeAgent:
             return result
 
         # ── All checks passed ──
-        self.audit.log("spend_approved", {"to": to, "amount": amount, "action": action})
+        proof = self.proof_gen.generate(self, amount, to, action)
+        self.audit.log("spend_approved", {"to": to, "amount": amount, "action": action, "proof_id": proof["signature"][:10]})
         return SpendResult(
             status="APPROVED",
             reason="All guards passed",
             remaining_budget=f"{remaining - amount:.2f}",
             risk_score=0.0,
+            safety_proof=proof
         )
 
     def record_spent(self, amount: float, to: str, action: str = "") -> None:

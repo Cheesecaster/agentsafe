@@ -1,23 +1,43 @@
-"""AuditChain — tamper-evident hash-chain audit log."""
+"""AuditChain — tamper-evident hash-chain audit log with Merkle Anchoring.
+
+Adapted from Brain.fi architecture (Layer 6: Audit/Merkle Anchoring).
+"""
 
 import hashlib
 import json
 import time
 from pathlib import Path
 
+from .merkle import MerkleTree
+
 
 class AuditChain:
-    """Append-only, hash-chained audit log.
+    """Append-only, hash-chained audit log with Merkle Anchoring.
 
     Every entry includes the hash of the previous entry, making it
     tamper-evident. Rewriting any entry invalidates all subsequent hashes.
-
-    Storage: JSONL (one JSON object per line) — easy to stream and verify.
+    
+    Additionally, the log can be aggregated into a Merkle Tree to produce
+    a 'Merkle Root'—a single cryptographic fingerprint of the entire log.
+    This root is what would be anchored on-chain (Base L2) in Brain.fi style.
     """
 
     def __init__(self, storage_path: str = "audit.jsonl"):
         self._path = Path(storage_path)
         self._last_hash = self._load_last_hash()
+
+    @property
+    def merkle_root(self) -> str:
+        """Compute the Merkle Root of the current audit log.
+        
+        This is the 'fingerprint' of all actions taken by the agent.
+        """
+        entries = self._read_all()
+        if not entries:
+            return ""
+        # Create leaf data string for each entry (hash + action + ts)
+        leaves = [f"{e['hash']}-{e['ts']}-{e['action']}" for e in entries]
+        return MerkleTree.get_root_hash(leaves)
 
     def log(self, action: str, details: dict) -> str:
         """Append an audit entry. Returns the entry hash."""

@@ -94,6 +94,10 @@ if result.status == "APPROVED":
 - **BehaviorHash**: Detects if the agent's model or prompt changes silently.
 - **KillSwitch**: Owner pauses agent instantly. Agent cannot self-resume.
 
+**Advanced Architecture (Brain.fi Adapted):**
+- **Merkle Anchoring**: Audit logs are aggregated into a Merkle Tree. The Root Hash acts as a cryptographic fingerprint of the agent's entire history, ready for on-chain anchoring.
+- **Formal Safety Proofs**: Every approved transaction generates a signed "Safety Proof" (verifiable JSON structure) ensuring compliance before payment executes.
+
 ---
 
 ## 2. x402 Client: Autonomous Payments

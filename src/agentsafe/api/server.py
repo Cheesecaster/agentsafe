@@ -26,7 +26,8 @@ def api_audit(hours):
     return jsonify({
         "count": len(entries),
         "verified": agent.audit.verify(),
-        "entries": entries[:100],  # Limit response size
+        "merkle_root": agent.audit.merkle_root,
+        "entries": entries[:100],
     })
 
 @app.route('/api/v1/trust')
