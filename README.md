@@ -1,5 +1,7 @@
 # agentsafe
 
+![agentsafe Logo](assets/agentsafe_logo.svg)
+
 **The Invisible Safety Layer for Autonomous AI Agents.**
 
 [![PyPI version](https://img.shields.io/pypi/v/agentsafe.svg)](https://pypi.org/project/agentsafe/)
@@ -91,7 +93,16 @@ Gas-optimized contracts for Base Mainnet:
 ### 5. ⚡ Rust Core (`crates/agentsafe-core/`)
 Zero-cost abstractions for high-frequency loops. Guards ported to Rust for <100ns latency and zero allocation.
 
-## 🧩 Integrations
+## 🛑 Architecture Flow
+
+See the [interactive flow diagram](assets/flow_diagram.html) for a visual breakdown.
+
+```text
+[ Agent Request ] → [ agentsafe SDK ] → [ ☁️ Cloud Check ] → [ 🟦 Base Settlement ]
+                           │                      │
+                    intercept &            Budget, Trust,
+                    ask permission        KillSwitch gates
+```
 
 We support multiple ways to integrate:
 
