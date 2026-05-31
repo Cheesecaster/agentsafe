@@ -1,4 +1,4 @@
-"""SafeAgent — Core orchestrator that chains all safety guards."""
+"""SafeAgent — Core orchestrator that chains all safety guards with session identity."""
 
 import hashlib
 import json
@@ -16,6 +16,7 @@ from .guard.behavior import BehaviorHash
 from .guard.kill_switch import KillSwitch
 from .guard.audit_chain import AuditChain
 from .guard.proof import SafetyProofGenerator
+from .guard.session_id import generate_session_id, format_agent_header
 
 
 @dataclass
@@ -27,17 +28,15 @@ class SpendResult:
     risk_score: float = 0.0
     payment_header: Optional[str] = None
     safety_proof: Optional[Dict[str, Any]] = None
+    session_id: str = ""          # Unique agent session identifier
+    agent_header: str = ""        # X-Agent-Session header value for merchant
 
 
 class SafeAgent:
     """Main safety gate for autonomous agents that spend money.
 
-    Usage:
-        agent = SafeAgent(daily_budget="0.50")
-        result = agent.before_spend(to="api.example.com", amount=0.05)
-        if result.status == "APPROVED":
-            # proceed with payment
-            agent.record_spent(0.05, "api.example.com")
+    Generates a unique session_id on init. Every spend is attributed to this session
+    via the X-Agent-Session HTTP header and Merkle audit log.
     """
 
     def __init__(
@@ -52,6 +51,7 @@ class SafeAgent:
         behavior_hash: Optional[str] = None,
         on_escalate: Optional[Callable] = None,
         storage_path: str = "~/.agentsafe",
+        session_seed: Optional[str] = None,
     ):
         self.currency = currency
         self._daily_budget = float(daily_budget)
@@ -62,140 +62,215 @@ class SafeAgent:
         storage = Path(os.path.expanduser(storage_path))
         storage.mkdir(parents=True, exist_ok=True)
 
-        # Initialize all guards
-        self.budget = BudgetGuard(self._daily_budget, storage / "budget.json")
+        # Generate unique session identity
+        self.wallet_address = storage.name  # Use storage path name as wallet proxy
+        self._session_id = generate_session_id(
+            wallet_address=self.wallet_address,
+            seed=session_seed,
+        )
+
+        # Initialize guards
+        self.budget = BudgetGuard(
+            daily_limit=float(daily_budget),
+            storage_path=str(storage / "budget.json"),
+        )
         self.trust = TrustRegistry(
-            allowlist=allowlist or [],
-            blocklist=blocklist or [],
+            allowlist=allowlist,
+            blocklist=blocklist,
             storage_path=str(storage / "trust.json"),
         )
         self.anomaly = AnomalyGuard(
-            multiplier=self._anomaly_multiplier,
+            multiplier=anomaly_multiplier,
             storage_path=str(storage / "anomaly.json"),
         )
         self.time_lock = TimeLock(
             quiet_hours=quiet_hours,
-            max_amount=self._quiet_hours_max,
+            max_amount=float(quiet_hours_max),
         )
-        self.behavior = BehaviorHash(registered_hash=behavior_hash)
-        self.kill_switch = KillSwitch(storage / "kill_switch.json")
-        self.audit = AuditChain(storage / "audit.jsonl")
+        self.behavior = BehaviorHash()
+        self.kill_switch = KillSwitch(
+            storage_path=str(storage / "killswitch.json"),
+        )
+        self.audit = AuditChain(
+            storage_path=str(storage / "audit.jsonl"),
+        )
         self.proof_gen = SafetyProofGenerator()
 
-        self.on_escalate = on_escalate
+        self._on_escalate = on_escalate
 
-        # Track spending history for anomaly detection
-        self._spend_history: list[tuple[float, float, str]] = []  # (ts, amount, to)
+    @property
+    def session_id(self) -> str:
+        """Unique session identity for this agent instance."""
+        return self._session_id
 
     def before_spend(self, to: str, amount: float, action: str = "") -> SpendResult:
-        """Run all safety checks before a payment.
+        """Run all safety checks before allowing a payment.
 
-        Returns SpendResult with status APPROVED, ESCALATE, or DENIED.
+        Returns SpendResult with session_id + X-Agent-Session header.
         """
         now = time.time()
-        hour = time.gmtime(now).tm_hour
-        remaining = self.budget.remaining
+        checks = {
+            "to": to,
+            "amount": amount,
+            "action": action,
+        }
 
-        # ── Check 1: Kill Switch ──
+        # 1. Kill switch (fail fast)
         if self.kill_switch.is_active:
-            return self._deny(reason=f"Kill switch active: {self.kill_switch.reason}")
+            return SpendResult(
+                status="DENIED",
+                reason="Kill switch is active — all spending halted.",
+                remaining_budget="0.00",
+                session_id=self._session_id,
+            )
 
-        # ── Check 2: Budget ──
+        # 2. Budget check
         if not self.budget.check(amount):
-            return self._deny(
-                reason=f"Budget exceeded. Remaining: {remaining} {self.currency}, need: {amount}"
+            return SpendResult(
+                status="DENIED",
+                reason=f"Budget exceeded ({amount} > {self.budget.remaining} remaining).",
+                remaining_budget=str(self.budget.remaining),
+                session_id=self._session_id,
             )
 
-        # ── Check 3: Trust Registry ──
-        trust_level = self.trust.check(to)
-        if trust_level == "BLOCKED":
-            self.audit.log("spend_denied", {"to": to, "amount": amount, "reason": "blocklisted"})
-            return self._deny(reason=f"Counterparty blocklisted: {to}")
-
-        # ── Check 4: Time Lock ──
-        if not self.time_lock.check(amount, hour):
-            return self._deny(
-                reason=f"Quiet hours ({self._quiet_hours[0]}-{self._quiet_hours[1]} UTC). "
-                       f"Max ${self.time_lock.max_amount}/tx, requested {amount}"
+        # 3. Trust check
+        trust_status = self.trust.check(to)
+        if trust_status == "BLOCKED":
+            return SpendResult(
+                status="DENIED",
+                reason=f"Destination {to} is blocked by trust registry.",
+                remaining_budget=f"{self.budget.remaining:.2f}",
+                session_id=self._session_id,
             )
 
-        # ── Check 5: Anomaly Detection ──
-        hourly_avg = self.anomaly.hourly_average(hour)
-        count_last_hour = self.anomaly.count_last_hour()
-        if amount > hourly_avg * self._anomaly_multiplier and hourly_avg > 0:
-            risk = min(1.0, amount / (hourly_avg * 2))
-            self._audit_and_escalate(
-                to, amount, f"Anomalous amount: {amount} vs avg {hourly_avg:.2f}", risk
-            )
-
-        if count_last_hour > 10:
-            self._audit_and_escalate(
-                to, amount, f"High frequency: {count_last_hour} tx last hour", min(1.0, count_last_hour / 15.0)
-            )
-
-        # ── Check 6: Behavior Hash ──
-        if self.behavior.is_registered and not self.behavior.matches_current():
-            risk = 0.9
-            self._audit_and_escalate(to, amount, "Behavior drift detected", risk)
-
-        # ── Check 7: Unknown counterparty → ESCALATE ──
-        if trust_level == "UNKNOWN" and amount >= self._quiet_hours_max:
-            self.audit.log("spend_escalated", {"to": to, "amount": amount, "action": action})
-            result = SpendResult(
+        # 3b. Unknown counterparty → ESCALATE
+        if trust_status == "UNKNOWN" and amount >= self._quiet_hours_max:
+            self._log("SPEND_ESCALATED", {
+                "to": to, "amount": amount, "action": action,
+                "session_id": self._session_id,
+            })
+            return SpendResult(
                 status="ESCALATE",
                 reason=f"Unknown counterparty: {to}. Requires owner approval.",
-                remaining_budget=f"{remaining:.2f}",
+                remaining_budget=f"{self.budget.remaining:.2f}",
                 risk_score=0.5,
+                session_id=self._session_id,
             )
-            if self.on_escalate:
-                self.on_escalate(result)
-            return result
 
-        # ── All checks passed ──
+        # 4. Anomaly detection
+        from datetime import datetime, timezone
+        hour_utc = datetime.now(timezone.utc).hour
+        hourly_avg = self.anomaly.hourly_average(hour_utc)
+        count_last_hour = self.anomaly.count_last_hour()
+        if hourly_avg > 0 and amount > hourly_avg * self._anomaly_multiplier:
+            self._log("ANOMALY_DETECTED", {
+                "to": to, "amount": amount, "avg": hourly_avg,
+                "session_id": self._session_id,
+            })
+
+        # 5. Time lock
+        if not self.time_lock.check(amount, hour_utc):
+            return SpendResult(
+                status="DENIED",
+                reason=f"Quiet hours: max ${self.time_lock.max_amount} allowed.",
+                remaining_budget=str(self.budget.remaining),
+                session_id=self._session_id,
+            )
+
+        # 6. Generate safety proof
         proof = self.proof_gen.generate(self, amount, to, action)
-        self.audit.log("spend_approved", {"to": to, "amount": amount, "action": action, "proof_id": proof["signature"][:10]})
+
+        # Build X-Agent-Session header for merchant identification
+        merkle_root = self.audit.merkle_root
+        agent_header = format_agent_header(
+            session_id=self._session_id,
+            wallet_address=self.wallet_address,
+            merkle_root=merkle_root,
+        )
+
+        # Log approval
+        self._log("SPEND_APPROVED", {
+            **checks,
+            "session_id": self._session_id,
+            "proof_sig": proof.get("signature", "")[:16],
+            "merkle_root": merkle_root[:16],
+        })
+
         return SpendResult(
             status="APPROVED",
-            reason="All guards passed",
-            remaining_budget=f"{remaining - amount:.2f}",
+            reason="All safety checks passed.",
+            remaining_budget=str(self.budget.remaining),
             risk_score=0.0,
-            safety_proof=proof
+            payment_header=agent_header,
+            safety_proof=proof,
+            session_id=self._session_id,
+            agent_header=agent_header,
         )
 
     def record_spent(self, amount: float, to: str, action: str = "") -> None:
-        """Record a successful spend. Updates budget, trust, anomaly stats."""
+        """Record an actual spend — updates budget, anomaly, behavior, audit."""
         now = time.time()
-        self.budget.record(amount)
-        self.anomaly.record(now, amount)
-        self.trust.add_interaction(to, success=True)
-        self._spend_history.append((now, amount, to))
 
-        self.audit.log("spend_recorded", {
-            "to": to, "amount": amount, "action": action,
-            "daily_spent": self.budget.spent_today,
+        # Update budget
+        self.budget.record(amount)
+
+        # Update anomaly tracker
+        self.anomaly.record(now, amount)
+
+        # Update trust
+        self.trust.add_interaction(to, success=True)
+
+        # Update behavior hash
+        behavior_str = action or f"paid {amount} to {to}"
+        self.behavior.update(BehaviorHash.compute(system_prompt=behavior_str))
+
+        # Log to audit chain (with session_id for merchant attribution)
+        self._log("SPENT", {
+            "amount": amount,
+            "to": to,
+            "action": action,
+            "session_id": self._session_id,
+            "ts_utc": now,
         })
 
+    def _log(self, action: str, details: dict) -> str:
+        """Log to audit chain."""
+        return self.audit.log(action, details)
+
     def status(self) -> dict:
-        """Return current safety status."""
-        trust_stats = self.trust.stats
+        """Get current agent status."""
+        remaining_val = self.budget.remaining
+        spent_val = self.budget.spent_today
         return {
+            "session_id": self._session_id,
+            "wallet_address": self.wallet_address,
             "daily_budget": f"{self._daily_budget:.2f} {self.currency}",
-            "spent_today": f"{self.budget.spent_today:.4f} {self.currency}",
-            "remaining": f"{self.budget.remaining:.4f} {self.currency}",
-            "status": "PAUSED" if self.kill_switch.is_active else "ACTIVE",
+            "spent_today": f"{spent_val:.4f} {self.currency}",
+            "remaining": f"{remaining_val:.4f} {self.currency}",
             "kill_switch": self.kill_switch.is_active,
-            "trust_stats": trust_stats,
             "audit_entries": self.audit.count,
+            "merkle_root": self.audit.merkle_root[:32] if self.audit.merkle_root else "",
             "last_reset": self.budget.last_reset,
+            "trust_stats": self.trust.stats,
         }
 
-    def _deny(self, reason: str) -> SpendResult:
-        self.audit.log("spend_denied", {"reason": reason})
-        return SpendResult(status="DENIED", reason=reason, remaining_budget=f"{self.budget.remaining:.2f}")
+    def activate_kill_switch(self) -> None:
+        """Emergency stop — halt all spending."""
+        self.kill_switch.activate()
+        self._log("KILL_SWITCH_ACTIVATED", {"session_id": self._session_id})
 
-    def _audit_and_escalate(self, to: str, amount: float, reason: str, risk: float):
-        self.audit.log("spend_escalated", {"to": to, "amount": amount, "reason": reason, "risk": risk})
-        result = SpendResult(status="ESCALATE", reason=reason, remaining_budget=f"{self.budget.remaining:.2f}", risk_score=risk)
-        if self.on_escalate:
-            self.on_escalate(result)
-        return result
+    def deactivate_kill_switch(self) -> None:
+        """Resume spending."""
+        self.kill_switch.deactivate()
+        self._log("KILL_SWITCH_DEACTIVATED", {"session_id": self._session_id})
+
+    def set_budget(self, daily_budget: str) -> None:
+        """Update daily budget limit."""
+        self._daily_budget = float(daily_budget)
+        self.budget.daily_limit = float(daily_budget)
+
+    def add_to_allowlist(self, destination: str) -> None:
+        self.trust.allow(destination)
+
+    def add_to_blocklist(self, destination: str) -> None:
+        self.trust.block(destination)

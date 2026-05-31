@@ -274,6 +274,7 @@ class SpendCheckRequest(BaseModel):
 class SpendCheckResponse(BaseModel):
     allowed: bool
     payment_header: Optional[str] = None
+    agent_session_header: Optional[str] = None  # X-Agent-Session for merchant identity
     reason: Optional[str] = None
     remaining_budget: Optional[str] = None
     risk_score: Optional[float] = None
@@ -282,6 +283,7 @@ class SpendCheckResponse(BaseModel):
 
 class StatusResponse(BaseModel):
     wallet_address: str
+    session_id: str = ""
     daily_budget: str
     spent_today: str
     remaining: str
@@ -290,6 +292,7 @@ class StatusResponse(BaseModel):
     total_spent: str
     session_count: int
     audit_entries: int
+    merkle_root: str = ""
     created_at: float
 
 
@@ -314,15 +317,11 @@ async def check_spend(
     )
 
     if result.status == "APPROVED":
-        signed_payload = None
-        if result.safety_proof:
-            signed_payload = result.safety_proof.get("signature", "")[:64]
-            if not signed_payload and result.safety_proof.get("merkle_root"):
-                signed_payload = result.safety_proof["merkle_root"][:64]
-
+        # Use real X-Agent-Session header from SafeAgent (merchant identity)
         return SpendCheckResponse(
             allowed=True,
-            payment_header=signed_payload or f"agentsafe-safe-{int(time.time())}",
+            payment_header=result.payment_header or f"agentsafe-safe-{int(time.time())}",
+            agent_session_header=result.agent_header or None,
             remaining_budget=result.remaining_budget,
             risk_score=result.risk_score,
         )
@@ -344,6 +343,7 @@ async def get_status(wallet: str = Depends(get_wallet)):
 
     return StatusResponse(
         wallet_address=wallet,
+        session_id=status.get("session_id", ""),
         daily_budget=user["daily_budget"],
         spent_today=status.get("spent_today", "0.00"),
         remaining=status.get("remaining", user["daily_budget"]),
@@ -352,6 +352,7 @@ async def get_status(wallet: str = Depends(get_wallet)):
         total_spent=user["total_spent"],
         session_count=user["session_count"],
         audit_entries=status.get("audit_entries", 0),
+        merkle_root=status.get("merkle_root", ""),
         created_at=user["created_at"],
     )
 

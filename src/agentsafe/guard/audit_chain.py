@@ -35,8 +35,11 @@ class AuditChain:
         entries = self._read_all()
         if not entries:
             return ""
-        # Create leaf data string for each entry (hash + action + ts)
-        leaves = [f"{e['hash']}-{e['ts']}-{e['action']}" for e in entries]
+        # Create leaf data string (hash + ts + action + session_id for agent attribution)
+        leaves = []
+        for e in entries:
+            session_id = e.get("details", {}).get("session_id", "")
+            leaves.append(f"{e['hash']}-{e['ts']}-{e['action']}-{session_id}")
         return MerkleTree.get_root_hash(leaves)
 
     def log(self, action: str, details: dict) -> str:

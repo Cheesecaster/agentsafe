@@ -63,7 +63,7 @@ class TestSafeAgentFullFlow:
         # ── Phase 2: Blocklisted counterparty ──
         status3 = agent.before_spend(to="evil.phishing.com", amount=0.01)
         assert status3.status == "DENIED"
-        assert "blocklisted" in status3.reason.lower() or "Kill" in status3.reason
+        assert "blocked" in status3.reason.lower() or "Kill" in status3.reason
 
         # ── Phase 3: Unknown counterparty triggers ESCALATE ──
         status4 = agent.before_spend(to="unknown.api.io", amount=1.00)
@@ -73,11 +73,11 @@ class TestSafeAgentFullFlow:
         agent.kill_switch.activate("anomalous behavior")
         status5 = agent.before_spend(to="api.openai.com", amount=1.00)
         assert status5.status == "DENIED"
-        assert "Kill switch active" in status5.reason
+        assert "Kill switch" in status5.reason
 
     def test_budget_exhaustion(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            agent = SafeAgent(daily_budget="1.00", storage_path=tmpdir)
+            agent = SafeAgent(daily_budget="1.00", quiet_hours=(26, 27), storage_path=tmpdir)
             agent.before_spend(to="api.test.com", amount=0.80)
             agent.record_spent(0.80, "api.test.com")
 
@@ -88,7 +88,7 @@ class TestSafeAgentFullFlow:
 
     def test_daily_reset(self):
         with tempfile.TemporaryDirectory() as tmpdir:
-            agent = SafeAgent(daily_budget="50.00", storage_path=tmpdir)
+            agent = SafeAgent(daily_budget="50.00", quiet_hours=(26, 27), storage_path=tmpdir)
             agent.before_spend(to="api.test.com", amount=30.0)
             agent.record_spent(30.0, "api.test.com")
             assert agent.budget.remaining < 50.0

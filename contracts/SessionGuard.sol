@@ -28,7 +28,13 @@ contract SessionGuard is Ownable, ReentrancyGuard {
 
     event SessionCreated(address key, uint128 dailyLimit, uint48 expiresAt);
     event LimitUpdated(address key, uint128 newLimit);
-    event AgentSpent(address key, uint128 amount, uint128 remainingDaily);
+    event AgentSpent(
+        address key,
+        bytes32 sessionId,     // Agent identity hash
+        address destination,
+        uint128 amount,
+        uint128 remainingDaily
+    );
     event SessionRevoked(address key);
     event FundsWithdrawn(address owner, uint128 amount);
 
@@ -91,10 +97,15 @@ contract SessionGuard is Ownable, ReentrancyGuard {
 
     /**
      * @notice Called by the agent to spend USDC for x402 payments.
+     * @param sessionId bytes32 identity hash from X-Agent-Session header.
      * @param destination Recipient (API provider, service, etc.)
      * @param amountWei Amount in USDC base units (6 decimals).
      */
-    function spend(address destination, uint128 amountWei) external nonReentrant {
+    function spend(
+        bytes32 sessionId,
+        address destination,
+        uint128 amountWei
+    ) external nonReentrant {
         require(destination != address(0) && destination != address(this), "Invalid dest");
         require(amountWei > 0, "Amount must be > 0");
 
@@ -114,7 +125,7 @@ contract SessionGuard is Ownable, ReentrancyGuard {
         s.spentToday += amountWei;
         SafeERC20.safeTransfer(USDC, destination, amountWei);
 
-        emit AgentSpent(msg.sender, amountWei, s.dailyLimit - s.spentToday);
+        emit AgentSpent(msg.sender, sessionId, destination, amountWei, s.dailyLimit - s.spentToday);
     }
 
     function revoke(address agentKey) external onlyOwner {
