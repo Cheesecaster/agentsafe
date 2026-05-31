@@ -1,6 +1,6 @@
 [project]
 name = "agentsafe"
-version = "0.4.0"
+version = "0.5.0"
 description = "Autonomous Agent Safety Kit for x402 Payments & Base Mainnet"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -8,18 +8,21 @@ dependencies = [
     "requests>=2.30",
     "eth-hash[pycryptodome]>=0.7",
     "web3>=6.0",
+    "fastapi>=0.100",
+    "uvicorn>=0.27",
+    "pydantic>=2.0",
+    "pyjwt>=2.8",
 ]
 
 [project.optional-dependencies]
 cli = ["typer>=0.9", "rich>=13.0"]
-api = ["flask>=3.0"]
-x402 = ["eip712>=0.2", "eth-account>=0.11"]
 mcp = ["mcp>=1.0"]
 dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [project.scripts]
 agentsafe = "agentsafe.cli.main:cli"
 agentsafe-mcp = "agentsafe.mcp.server:app"
+agentsafe-server = "agentsafe.api.server:start_server"
 
 [project.entry-points."mcp.servers"]
 agentsafe = "agentsafe.mcp.server:app"

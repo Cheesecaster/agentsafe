@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agentsafe — Architecture Flow</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
+    background: #F5F7FA;
+    color: #14161B;
+    padding: 40px 20px;
+  }
+  h1 {
+    text-align: center;
+    font-size: 32px;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .subtitle {
+    text-align: center;
+    color: #8A919E;
+    font-size: 16px;
+    margin-bottom: 48px;
+  }
+  .flow-container {
+    max-width: 900px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+  }
+  .step {
+    background: #FFFFFF;
+    border: 1px solid #E3E6EA;
+    border-radius: 16px;
+    padding: 28px 32px;
+    width: 100%;
+    max-width: 520px;
+    display: flex;
+    align-items: flex-start;
+    gap: 16px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    transition: transform 0.2s, box-shadow 0.2s;
+    opacity: 0;
+    transform: translateY(20px);
+    animation: fadeUp 0.6s forwards;
+  }
+  .step:nth-child(1) { animation-delay: 0.1s; }
+  .step:nth-child(3) { animation-delay: 0.3s; }
+  .step:nth-child(5) { animation-delay: 0.5s; }
+  .step:nth-child(7) { animation-delay: 0.7s; }
+  .step:nth-child(9) { animation-delay: 0.9s; }
+
+  @keyframes fadeUp {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  .step:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px rgba(0,82,255,0.08);
+  }
+  .step-num {
+    flex-shrink: 0;
+    width: 36px; height: 36px;
+    background: #0052FF;
+    color: #fff;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+  }
+  .step-body { flex: 1; }
+  .step-body h3 {
+    font-size: 16px;
+    font-weight: 700;
+    margin-bottom: 4px;
+  }
+  .step-body p {
+    font-size: 14px;
+    color: #8A919E;
+    line-height: 1.5;
+  }
+  .step-body code {
+    background: #F0F4FF;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    color: #0052FF;
+  }
+
+  .arrow {
+    width: 2px;
+    height: 32px;
+    background: linear-gradient(to bottom, #E3E6EA, #0052FF, #E3E6EA);
+    position: relative;
+  }
+  .arrow::after {
+    content: '▼';
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: #0052FF;
+    font-size: 10px;
+  }
+
+  .legend {
+    margin-top: 48px;
+    text-align: center;
+    font-size: 13px;
+    color: #8A919E;
+  }
+  .legend strong { color: #14161B; }
+</style>
+</head>
+<body>
+
+<h1>🌐 Agentsafe Flow</h1>
+<p class="subtitle">How a user connects & how an agent spends safely on Base</p>
+
+<div class="flow-container">
+
+  <div class="step">
+    <div class="step-num">1</div>
+    <div class="step-body">
+      <h3>Connect Wallet</h3>
+      <p>User opens <strong>agentsafe.app</strong> → clicks "Connect Wallet" → MetaMask/WalletConnect pops up.</p>
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="step">
+    <div class="step-num">2</div>
+    <div class="step-body">
+      <h3>Sign Message (No Gas)</h3>
+      <p>Server sends a nonce. User signs <code>personal_sign</code>. Free — no transaction, no gas fee.</p>
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="step">
+    <div class="step-num">3</div>
+    <div class="step-body">
+      <h3>Server Verifies → JWT Session</h3>
+      <p>Signature verified against wallet address. Server issues 24h JWT token. User is now authenticated.</p>
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="step">
+    <div class="step-num">4</div>
+    <div class="step-body">
+      <h3>Generate API Key for Agent</h3>
+      <p>Dashboard creates an API key scoped to this wallet. Developer pastes key into their agent code.</p>
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="step">
+    <div class="step-num">5</div>
+    <div class="step-body">
+      <h3>Agent Runs → Hits Paid API</h3>
+      <p>Agent makes a request. API returns <code>HTTP 402</code> (payment required). SDK intercepts.</p>
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="step">
+    <div class="step-num">6</div>
+    <div class="step-body">
+      <h3>Safety Gate Check</h3>
+      <p>Server runs all 8 guards: Budget ✓ Trust ✓ Anomaly ✓ KillSwitch ✓<br>
+       If all pass → <strong>APPROVED</strong> + signed payment header.</p>
+    </div>
+  </div>
+
+  <div class="arrow"></div>
+
+  <div class="step">
+    <div class="step-num">7</div>
+    <div class="step-body">
+      <h3>x402 Settlement on Base</h3>
+      <p>EIP-3009 gasless USDC transfer. Agent gets access. Every spend logged to Merkle audit chain.</p>
+    </div>
+  </div>
+
+</div>
+
+<p class="legend">
+  <strong>Base Mainnet (8453)</strong> · USDC (6 decimals) · x402 protocol · Wallet auth
+</p>
+
+</body>
+</html>
