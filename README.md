@@ -14,21 +14,39 @@
 
 ## The Problem
 
-Autonomous agents now hold their own wallets. They can pay for APIs, lease code modules, and trade assets autonomously.
+Base & Coinbase are pushing **Agent MCP = every agent gets its own wallet.**
+Agent can sign transactions, spend USDC, lease modules, pay APIs — all autonomously.
+
 **But who stops the agent when it goes rogue?**
 
-If an agent gets stuck in a bug loop, pays a scammer, or leaks its `.env`, the money is gone instantly.
-Current projects focus on *how to accept* x402 payments. Nobody focuses on *how to spend safely*.
+- Loop bug → 400 requests → $20 gone in 20 minutes
+- Lease malicious module → poisoned instincts → broken code
+- `.env` leaked → wallet drained
+- No audit trail → owner can't verify what happened
+
+Every project is building "how to **accept** x402 payments."
+Nobody's building "how to **spend** x402 payments **safely**."
+
+Until now.
+
+## Philosophy
+
+> **Base says:** "Your agent should have its own wallet."
+> **We say:** "Your agent should have its own wallet **and sleep well at night.**"
+
+`agentsafe` doesn't replace the wallet. It **protects** it.
+
+---
 
 ## What Is `agentsafe`?
 
-v0.3.0 is a complete, production-ready stack for safe autonomous spending:
+v0.3.0 is a complete stack for safe autonomous spending on Base Network:
 
 1. **Python Guard Library**: 6 safety layers (Budget, Trust, Anomaly, TimeLock, Behavior, Audit).
 2. **x402 Client (Base USDC)**: Detects 402 tags, checks safety, pays via EIP-3009.
-3. **Smart Contracts**: On-chain enforcement (`SessionGuard` & `EscrowSimple`).
-4. **Web Dashboard**: Real-time Base Mainnet monitoring & control.
-5. **Rust Core**: Zero-cost safety checks.
+3. **Smart Contracts**: On-chain enforcement (`SessionGuard` daily caps).
+4. **Web Dashboard**: Real-time Base Mainnet monitoring via Metamask.
+5. **Rust Core**: Zero-cost safety checks (`agentsafe-rs`).
 
 ---
 
@@ -105,8 +123,11 @@ Manages session keys for agents with daily spending limits.
 - **Auto-Reset**: `spentToday` clears at Midnight UTC.
 - **Revokeable**: Instant access kill-switch.
 
-### `EscrowSimple`
-Holds funds for agent-to-agent services. Releases only on approval or after timeout.
+```solidity
+// Example: Deploy & Set $20/day limit
+SessionGuard guard = new SessionGuard(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
+guard.createSession(agentAddress, 20_000_000, 30 days); // 20 USDC
+```
 
 ---
 
@@ -120,9 +141,9 @@ agentsafe serve
 ```
 
 **Features:**
-- **Wallet Connect**: Connect MetaMask/Base Wallet.
-- **Live Data**: See real-time USDC balance & Session status.
-- **Control**: "Pause Agent" button that interacts with Base Chain.
+- **Wallet Connect**: Connect MetaMask/Base Wallet via Ethers.js.
+- **Live Data**: See real-time USDC/ETH balance & Session status.
+- **Control**: "Pause Agent" & "Set Limit" buttons that interact directly with the Base Chain.
 
 ---
 
@@ -135,19 +156,10 @@ A `rust/` workspace is prepared for high-performance safety checks.
 
 ---
 
-## Roadmap & Status
+## License
 
-| Feature | Status |
-|---------|--------|
-| **Python Guards** | ✅ Stable |
-| **Web Dashboard** | ✅ Live |
-| **x402 Client** | ✅ Base Mainnet Ready |
-| **Smart Contracts** | ✅ Deployed (Draft) |
-| **Rust Core** | 📦 Scaffolded |
-| **Rust Bindings** | 🚧 WIP |
+MIT. Open-source, free to use, free to audit.
 
 ---
 
-## License
-
-MIT. Open-source.
+*Built for the agentic economy. Because agents that spend should spend safely.*
