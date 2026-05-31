@@ -9,9 +9,17 @@ from .guard.behavior import BehaviorHash
 from .guard.kill_switch import KillSwitch
 from .guard.audit_chain import AuditChain
 
-__version__ = "0.1.0"
+# Optional x402 export (requires agentsafe[x402] extras)
+try:
+    from .x402 import X402Client, X402PaymentError
+except ImportError:
+    X402Client = None
+    X402PaymentError = None
+
+__version__ = "0.3.0"
 __all__ = [
     "SafeAgent", "SpendResult",
     "BudgetGuard", "TrustRegistry", "AnomalyGuard",
     "TimeLock", "BehaviorHash", "KillSwitch", "AuditChain",
+    "X402Client", "X402PaymentError",
 ]
