@@ -1,169 +1,139 @@
-# `agentsafe`
+# agentsafe
 
-> **The seatbelt for autonomous agents that spend money via x402.**
+**Autonomous Agent Safety Kit for x402 Payments & Base Mainnet**
 
-[![Base](https://img.shields.io/badge/Base-USDC-0052FF)](https://base.org)
-[![x402](https://img.shields.io/badge/x402-Payment--Required-5200FF)](https://x402.org)
-[![Python](https://img.shields.io/badge/Python-3.12+-3776AB)](https://python.org)
-[![Solidity](https://img.shields.io/badge/Solidity-0.8.24-363636)](contracts/)
-[![Rust](https://img.shields.io/badge/Rust-0.1.0-DEA584)](rust/)
-[![v0.3.0](https://img.shields.io/badge/Version-0.3.0-green)](https://github.com/Cheesecaster/agentsafe/releases)
-[![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
-
----
-
-## The Problem
-
-Base & Coinbase are pushing **Agent MCP = every agent gets its own wallet.**
-Agent can sign transactions, spend USDC, lease modules, pay APIs — all autonomously.
-
-**But who stops the agent when it goes rogue?**
-
-- Loop bug → 400 requests → $20 gone in 20 minutes
-- Lease malicious module → poisoned instincts → broken code
-- `.env` leaked → wallet drained
-- No audit trail → owner can't verify what happened
-
-Every project is building "how to **accept** x402 payments."
-Nobody's building "how to **spend** x402 payments **safely**."
-
-Until now.
-
-## Philosophy
-
-> **Base says:** "Your agent should have its own wallet."
-> **We say:** "Your agent should have its own wallet **and sleep well at night.**"
-
-`agentsafe` doesn't replace the wallet. It **protects** it.
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10+-blue.svg)](https://www.python.org/downloads/)
+[![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
+[![Solidity](https://img.shields.io/badge/Solidity-0.8.20-363636.svg)](https://soliditylang.org/)
+[![Base Mainnet](https://img.shields.io/badge/Network-Base%20Mainnet-0052ff.svg)](https://base.org/)
+**v0.4.0 — Merkle Audits & Formal Proofs**
 
 ---
 
-## What Is `agentsafe`?
+`agentsafe` is a drop-in safety layer for autonomous AI agents performing **x402 micropayments**.
+It provides **budget caps, trust verification, anomaly detection, and cryptographic audit trails** without requiring enterprise bloatware.
 
-v0.3.0 is a complete stack for safe autonomous spending on Base Network:
+Built for the **Base Agent Economy**.
 
-1. **Python Guard Library**: 6 safety layers (Budget, Trust, Anomaly, TimeLock, Behavior, Audit).
-2. **x402 Client (Base USDC)**: Detects 402 tags, checks safety, pays via EIP-3009.
-3. **Smart Contracts**: On-chain enforcement (`SessionGuard` daily caps).
-4. **Web Dashboard**: Real-time Base Mainnet monitoring via Metamask.
-5. **Rust Core**: Zero-cost safety checks (`agentsafe-rs`).
+## 🚀 The Problem: Agent Economics are Unsafe
+AI Agents are getting wallets, but they lack **financial impulse control**.
+- 📉 **Runaway Spend**: An agent loops 1,000 API calls and drains the wallet in seconds.
+- 🐛 **Prompt Injection**: Malicious inputs trick agents into transferring funds to attackers.
+- 📝 **No Recourse**: No human-readable audit logs for agent spending. No Kill Switch.
 
----
+**Agentsafe** is the "seatbelt" for the Agent Economy. It allows agents to remain autonomous while enforcing strict, cryptographically verifiable safety boundaries defined by the owner.
 
-## Installation
+## 🛡️ Core Architecture
 
+We blend **Python flexibility** with **Rust performance** and **Solidity enforcement**.
+
+### 1. 🧠 Python Guard Core (`src/agentsafe/guard/`)
+Deterministic safety policy engine running <1ms checks:
+- `BudgetGuard`: Enforces daily/total spend limits (e.g., $20/day).
+- `TrustRegistry`: Whitelists verified x402 endpoints.
+- `AnomalyGuard`: Detects spending velocity spikes (3σ deviation).
+- `TimeLock`: Prevents burst spending; enforces cool-downs between transactions.
+- `BehaviorHash`: Verifies agent "intent stability" before release.
+- `KillSwitch`: Immediate session revocation by the owner.
+
+### 2. 🌳 Merkle Audit Chain (v0.4.0)
+Enterprise-grade verification (inspired by Layer 6 Financial protocols):
+- Every agent action is logged in a **Merkle Tree**.
+- The **Merkle Root** is available on-chain, making logs tamper-proof.
+- Changing a single log entry invalidates the root hash: **Immediate fraud detection**.
+
+### 3. 🛡️ Formal Safety Proofs (v0.4.0)
+Before an x402 payment is released, agentsafe generates a **Signed Safety Proof**:
+```json
+{
+  "agent_id": "agent_0x123",
+  "intent_hash": "0xabc...",
+  "checks": {
+    "budget_ok": true,
+    "trust_verified": true,
+    "anomaly_score": 0.02
+  },
+  "merkle_root": "0x789...",
+  "signature": "0xdead..."
+}
+```
+This proof is attached to the x402 transaction, satisfying high-compliance environments.
+
+### 4. 🤝 Smart Contracts (`contracts/`)
+On-chain enforcement on Base Mainnet:
+- `SessionGuard.sol`: Non-custodial session management with adjustable daily limits.
+- `EscrowSimple.sol`: USDC escrow for trusted x402 transactions.
+- `AgentRegistry.sol`: DID-style identity for verified agents.
+
+### 5. ⚡ Rust Core (`crates/agentsafe-core/`)
+Zero-cost abstractions for high-frequency loops. Guards ported to Rust for <100ns latency and zero allocation.
+
+### 6. 🌐 Web Dashboard
+- Connect Base wallet (MetaMask/WalletConnect).
+- Live monitor of agent sessions, spend, and health.
+- **Live Kill Switch** and limit adjustment directly from UI.
+
+## 💻 Usage
+
+### Installation
 ```bash
-# Core Library
 pip install agentsafe
-
-# With x402 Client (Base USDC payments)
-pip install agentsafe[x402]
-
-# With Web API & Dashboard
-pip install agentsafe[api]
+# or from source
+git clone https://github.com/Cheesecaster/agentsafe.git
+cd agentsafe && pip install -e .
 ```
 
----
-
-## 1. Python API: The Safety Engine
-
-The core logic that sits between your agent and the internet.
-
+### Python Example
 ```python
-from agentsafe import SafeAgent
+from agentsafe.safe_agent import SafeAgent
+from agentsafe.guard import BudgetGuard, TrustRegistry, AnomalyGuard
 
+# 1. Initialize Guards
+budget = BudgetGuard(daily_limit_usdc=20.0)  # $20/day cap
+trust = TrustRegistry(whitelist=["api.openai.com"])
+anomaly = AnomalyGuard()
+
+# 2. Create Safe Agent
 agent = SafeAgent(
-    daily_budget="20.00",  # Max $20/day
-    currency="USDC",
-    allowlist=["trusted-api.com"],
+    name="trader-bot",
+    guards=[budget, trust, anomaly],
+    wallet="0xYourBaseWallet"
 )
 
-# Agent wants to pay $0.05
-result = agent.before_spend(to="api.com", amount=0.05, action="lease_module")
+# 3. Run with Safety
+status = agent.check_safety(
+    target="api.openai.com",
+    amount_usdc=5.00
+)
 
-if result.status == "APPROVED":
-    agent.record_spent(0.05, "api.com")
-    # ... proceed with payment ...
+if status.allowed:
+    print(f"✅ Approved. Remaining Daily: ${status.remaining}")
+else:
+    print(f"🚫 Denied: {status.reason}")
 ```
 
-**6 Active Guards:**
-- **BudgetGuard**: Daily cap (e.g. $20), auto-reset at midnight UTC.
-- **TrustRegistry**: Allow/Block lists. Auto-promote after 5 successes.
-- **AnomalyGuard**: Flags spending >3x average or >10 tx/hour.
-- **TimeLock**: Stricter limits during quiet hours (e.g. 3 AM).
-- **BehaviorHash**: Detects if the agent's model or prompt changes silently.
-- **KillSwitch**: Owner pauses agent instantly. Agent cannot self-resume.
-
-**Advanced Architecture (Brain.fi Adapted):**
-- **Merkle Anchoring**: Audit logs are aggregated into a Merkle Tree. The Root Hash acts as a cryptographic fingerprint of the agent's entire history, ready for on-chain anchoring.
-- **Formal Safety Proofs**: Every approved transaction generates a signed "Safety Proof" (verifiable JSON structure) ensuring compliance before payment executes.
-
----
-
-## 2. x402 Client: Autonomous Payments
-
-Automatically pays for protected resources (APIs, Data) via Base USDC.
-
-```python
-from agentsafe import SafeAgent
-from agentsafe.x402 import X402Client
-
-agent = SafeAgent(daily_budget="20.00")
-client = X402Client(agent_safe=agent, wallet_private_key="0x...")
-
-# Automatically handles 402 challenges + Safety Checks + EIP-3009 Signatures
-response = client.get("https://api.example.com/premium-data")
-```
-
----
-
-## 3. Smart Contracts: On-Chain Enforcement
-
-Solidity contracts ready for **Base Mainnet**.
-
-### `SessionGuard`
-Manages session keys for agents with daily spending limits.
-- **Adjustable**: Owner can increase/decrease daily caps (e.g. $20 -> $50) instantly.
-- **Auto-Reset**: `spentToday` clears at Midnight UTC.
-- **Revokeable**: Instant access kill-switch.
-
-```solidity
-// Example: Deploy & Set $20/day limit
-SessionGuard guard = new SessionGuard(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
-guard.createSession(agentAddress, 20_000_000, 30 days); // 20 USDC
-```
-
----
-
-## 4. Web Dashboard (v0.3.0+)
-
-A live "Control Center" for your agents on Base Mainnet.
-
+### Deploy to Base Mainnet
+We provide a deployment script to initialize `SessionGuard` on Base:
 ```bash
-agentsafe serve
-# Opens http://localhost:8050
+python scripts/deploy.py --network mainnet --rpc-url $BASE_RPC --pk $PRIV_KEY
 ```
 
-**Features:**
-- **Wallet Connect**: Connect MetaMask/Base Wallet via Ethers.js.
-- **Live Data**: See real-time USDC/ETH balance & Session status.
-- **Control**: "Pause Agent" & "Set Limit" buttons that interact directly with the Base Chain.
+## 🧪 Development
+```bash
+pip install -e ".[dev]"
+pytest tests/
+```
 
----
+## 🗺️ Roadmap
+- [x] **v0.1.0:** Python Guard Core.
+- [x] **v0.2.0:** Web Dashboard & API.
+- [x] **v0.3.0:** x402 Client & Base Contracts.
+- [x] **v0.4.0:** Merkle Audit & Formal Proofs.
+- [ ] **v0.5.0:** Rust Core PyO3 bindings & ZK-Proof generation.
 
-## 5. Agentsafe-Rust (Foundation)
+## 🤝 Contributing
+PRs welcome. Focus on deterministic safety logic and Base Mainnet integration.
 
-A `rust/` workspace is prepared for high-performance safety checks.
-- **Zero-cost**: Guard checks in <100ns.
-- **Memory Safe**: No GC, deterministic allocation.
-- **Bindings**: Planned PyO3 export for Python users.
-
----
-
-## License
-
-MIT. Open-source, free to use, free to audit.
-
----
-
-*Built for the agentic economy. Because agents that spend should spend safely.*
+## 📄 License
+MIT
