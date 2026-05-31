@@ -2,10 +2,14 @@
 
 > **The seatbelt for autonomous agents that spend money via x402.**
 
+![agentsafe Logo](assets/agentsafe_logo.svg)
+
 [![Base](https://img.shields.io/badge/Base-USDC-0052FF)](https://base.org)
 [![x402](https://img.shields.io/badge/x402-Payment--Required-5200FF)](https://x402.org)
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+
+See the [interactive flow diagram](assets/flow_diagram.html) for a visual breakdown.
 
 ---
 
