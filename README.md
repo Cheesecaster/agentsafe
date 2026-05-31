@@ -129,5 +129,19 @@ make test  # Run 27 E2E & Unit Tests
 - [x] **v0.5.0:** Contract optimization (storage packing, SafeERC20) + SaaS SDK focus.
 - [ ] **v0.6.0:** Rust Core PyO3 bindings & Base Mainnet live deployment.
 
+## ⚡ Powered By
+
+Built on **Base Mainnet** with **x402** protocol for gasless USDC micropayments.
+
+<p align="center">
+  <a href="https://base.org"><img src="https://img.shields.io/badge/Network-Base%20(8453)-0052ff?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTEyIDJMIDQgNnYxMmw4IDQgOC00VjZsLTgtNHptMCAydjIuODMgTDcuMTcgOS45NCA0IDcuODMgMTIgNHptNCA1LjgzTDIwIDkuOTRWNiAxNnYtMi4xN3ptMTIuMTcgNC4xN3Y0LjY2TDEyIDIwbC00LjgzLTIuMTd2NC42NkwxMiAyNHptLTQgMEwxMiAyLjE3djQuNjZsNC4xNyAyLjE3eiIgZmlsbD0iIzAwNTJGRiIvPjwvc3ZnPg==" alt="Base" /></a>
+  <a href="https://x402.org"><img src="https://img.shields.io/badge/Payment%20Protocol-x402-4F46E5?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PHBhdGggZD0iTTEyIDJDMTYuNDIgMiAyMCA1LjU4IDIwIDEwYzAgMy4xOC0xLjcgNS45OC00LjI1IDcuNTlMMjAgMjBsLTMuNTktMy41OUMxNS40NyAxNi44OSAxMy4zOCAxNyAxMiAxN2MtNC40MiAwLTgtMy41OC04LThzMy41OC04IDgtOHptMCAyYy0zLjMxIDAtNiAyLjY5LTYgNnMyLjY5IDYgNiA2IDYtMi42OSA2LTZzLTIuNjktNi02LTZ6bS0xIDEydjJoMnYtMmgtMnptMC04djZoMnYtNmgtMnoiIGZpbGw9IiM0RjQ2RTUiLz48L3N2Zz4=" alt="x402" /></a>
+  <a href="https://usdc.coinbase.com"><img src="https://img.shields.io/badge/Settlement-USDC%20Base-2775CA?style=for-the-badge&logo=data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMTIiIGN5PSIxMiIgcj0iMTAiIGZpbGw9IiMyNzc1Q0EiLz48dGV4dCB4PSIxMiIgeT0iMTYiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZvbnQtc2l6ZT0iMTIiIGZvbnQtd2VpZ2h0PSJib2xkIiBmaWxsPSIjZmZmIiBmb250LWZhbWlseT0ic2Fucy1zZXJpZiI+JDwvdGV4dD48L3N2Zz4=" alt="USDC" /></a>
+</p>
+
+<p align="center">
+  <strong>Credits by <a href="https://github.com/TomKet">TomKet</a></strong>
+</p>
+
 ## 📄 License
 MIT
