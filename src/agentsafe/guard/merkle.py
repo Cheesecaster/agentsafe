@@ -13,7 +13,23 @@ class MerkleNode:
         self.hash = hash_val
 
 class MerkleTree:
-    """Builds a Merkle Tree from a list of hashes (audit entries)."""
+    """Builds a Merkle Tree from a list of hashes (audit entries).
+    
+    Can be used as static methods or as an instance-based appendable tree.
+    """
+
+    def __init__(self):
+        self._leaves: list[str] = []
+
+    def append(self, data: str):
+        """Add a leaf entry to the tree."""
+        self._leaves.append(data)
+
+    def get_root(self) -> str | None:
+        """Returns the current Root Hash."""
+        if not self._leaves:
+            return None
+        return MerkleTree.get_root_hash(self._leaves)
 
     @staticmethod
     def _hash(data: str) -> str:

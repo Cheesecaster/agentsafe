@@ -7,7 +7,7 @@
 [![Rust](https://img.shields.io/badge/Rust-1.70+-orange.svg)](https://www.rust-lang.org/)
 [![Solidity](https://img.shields.io/badge/Solidity-0.8.20-363636.svg)](https://soliditylang.org/)
 [![Base Mainnet](https://img.shields.io/badge/Network-Base%20Mainnet-0052ff.svg)](https://base.org/)
-**v0.4.0 — Merkle Audits & Formal Proofs**
+**v0.5.0 — Production Deployment Ready**
 
 ---
 
@@ -139,15 +139,25 @@ else:
 ```
 
 ### Deploy to Base Mainnet
-We provide a deployment script to initialize `SessionGuard` on Base:
 ```bash
-python scripts/deploy.py --network mainnet --rpc-url $BASE_RPC --pk $PRIV_KEY
+cp .env.example .env  # Add your private key
+python scripts/deploy.py base
 ```
+Deploys `SessionGuard`, `EscrowSimple`, and `AgentRegistry` to Base Mainnet with optimized bytecode.
+
+### Run as MCP Server
+```bash
+pip install agentsafe[mcp]
+python -m agentsafe.mcp.server
+```
+Exposes `create_session`, `check_budget`, `kill_session`, and `audit_log` to any MCP-compatible agent.
 
 ## 🧪 Development
 ```bash
-pip install -e ".[dev]"
-pytest tests/
+make test       # Run unit + E2E tests (27 tests)
+make test-e2e   # E2E flow only
+make deploy     # Deploy to Base Mainnet
+make deploy-local # Deploy to local Anvil
 ```
 
 ## 🗺️ Roadmap
@@ -155,7 +165,9 @@ pytest tests/
 - [x] **v0.2.0:** Web Dashboard & API.
 - [x] **v0.3.0:** x402 Client & Base Contracts.
 - [x] **v0.4.0:** Merkle Audit & Formal Proofs.
-- [ ] **v0.5.0:** Rust Core PyO3 bindings & ZK-Proof generation.
+- [x] **v0.4.1:** Base MCP Server.
+- [x] **v0.5.0:** Contract optimization (storage packing, SafeERC20, ReentrancyGuard) + Deploy script + E2E suite.
+- [ ] **v0.6.0:** Rust Core PyO3 bindings & Base Mainnet live deployment.
 
 ## 🤝 Contributing
 PRs welcome. Focus on deterministic safety logic and Base Mainnet integration.

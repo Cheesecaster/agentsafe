@@ -110,6 +110,11 @@ class AuditChain:
         with open(self._path) as f:
             return sum(1 for _ in f)
 
+    def get_recent_logs(self, n: int = 10) -> list[dict]:
+        """Return the last N log entries."""
+        all_entries = self._read_all()
+        return all_entries[-n:] if all_entries else []
+
     def _read_all(self) -> list[dict]:
         if not self._path.exists():
             return []

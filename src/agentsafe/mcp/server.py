@@ -2,98 +2,62 @@
 agentsafe MCP Server — Model Context Protocol wrapper.
 Exposes agentsafe safety tools to any MCP-compatible agent (Claude, Base Agents, etc.)
 """
-from pathlib import Path
 import json
+import tempfile
+from pathlib import Path
+from contextlib import contextmanager
 from typing import Optional
 
-from mcp.server import Server, NotificationOptions
-from mcp.server.models import InitializationOptions
-from mcp.types import (
-    Tool,
-    TextContent,
-    CallToolRequest,
-    CallToolResult,
-    ListToolsResult,
-)
+from mcp.server import Server
+from mcp.types import Tool, TextContent, CallToolResult
 
-# Import agentsafe core logic
+# Import agentsafe core
 from agentsafe.safe_agent import SafeAgent
-from agentsafe.guard import (
-    BudgetGuard,
-    TrustRegistry,
-    AnomalyGuard,
-    TimeLock,
-    KillSwitch,
-)
-from agentsafe.guard.audit_chain import AuditChain
-from agentsafe.guard.behavior import BehaviorHash
-
 
 # ── Session State ──────────────────────────────────────────
+_tmpdir: Optional[str] = None
 _active_session: Optional[SafeAgent] = None
-_guards_config: dict = {}
-_state_file = Path("agentsafe_session.json")
 
 
-def _load_session():
-    global _active_session, _guards_config
-    if _state_file.exists():
-        state = json.loads(_state_file.read_text())
-        budget = BudgetGuard(daily_limit_usd=state["budget_limit"])
-        trust = TrustRegistry(whitelist=state.get("whitelist", []))
-        anomaly = AnomalyGuard()
-        timelock = TimeLock(cooldown_seconds=state.get("cooldown", 60))
-        killswitch = KillSwitch()
-        audit = AuditChain()
-        _guards_config = {
-            "budget": budget,
-            "trust": trust,
-            "anomaly": anomaly,
-            "timelock": timelock,
-            "killswitch": killswitch,
-            "audit": audit,
-        }
+def _ensure_tmpdir():
+    global _tmpdir
+    if _tmpdir is None:
+        _tmpdir = tempfile.mkdtemp(prefix="agentsafe_mcp_")
+    return _tmpdir
+
+
+def _get_session() -> SafeAgent:
+    """Get or create session. If no session, create a default."""
+    global _active_session, _tmpdir
+    if _active_session is None:
+        _tmpdir = tempfile.mkdtemp(prefix="agentsafe_mcp_")
         _active_session = SafeAgent(
-            name=state["agent_name"],
-            guards=[budget, trust, anomaly, timelock, killswitch],
-            wallet=state["agent_wallet"],
-            audit_chain=audit,
+            daily_budget="20.00",
+            allowlist=[],
+            storage_path=_tmpdir,
         )
-        return True
-    return False
+    return _active_session
 
 
-def _save_session():
-    if _active_session:
-        state = {
-            "agent_name": _active_session.agent_name,
-            "agent_wallet": _active_session.agent_wallet,
-            "budget_limit": _guards_config["budget"].daily_limit_usd,
-            "whitelist": _guards_config["trust"].whitelist,
-            "cooldown": _guards_config["timelock"].cooldown_seconds,
-        }
-        _state_file.write_text(json.dumps(state, indent=2))
+def _create_session(args: dict) -> SafeAgent:
+    global _active_session, _tmpdir
+    _tmpdir = tempfile.mkdtemp(prefix="agentsafe_mcp_")
+    _active_session = SafeAgent(
+        daily_budget=str(float(args.get("daily_limit_usd", 20.0))),
+        allowlist=args.get("whitelist", []),
+        quiet_hours=(args.get("quiet_start", 0), args.get("quiet_end", 0)),
+        storage_path=_tmpdir,
+    )
+    return _active_session
 
 
 # ── MCP Server Definition ──────────────────────────────────
 app = Server("agentsafe")
 
-# Tool: check_budget
+
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     return [
-        Tool(
-            name="check_budget",
-            description="Check if an agent has enough budget for a transaction.",
-            inputSchema={
-                "type": "object",
-                "properties": {
-                    "agent_name": {"type": "string", "description": "Agent identifier"},
-                    "amount_usd": {"type": "number", "description": "Amount to spend in USD"},
-                },
-                "required": ["agent_name", "amount_usd"],
-            },
-        ),
         Tool(
             name="create_session",
             description="Create a new safety session for an agent with limits and whitelist.",
@@ -101,12 +65,22 @@ async def list_tools() -> list[Tool]:
                 "type": "object",
                 "properties": {
                     "agent_name": {"type": "string"},
-                    "agent_wallet": {"type": "string"},
                     "daily_limit_usd": {"type": "number", "description": "e.g. 20"},
                     "whitelist": {"type": "array", "items": {"type": "string"}, "description": "Allowed domains"},
-                    "cooldown_seconds": {"type": "integer", "description": "Min seconds between txs"},
                 },
-                "required": ["agent_name", "agent_wallet", "daily_limit_usd"],
+                "required": ["daily_limit_usd"],
+            },
+        ),
+        Tool(
+            name="check_budget",
+            description="Check if an agent has enough budget for a transaction.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "amount_usd": {"type": "number", "description": "Amount to spend in USD"},
+                    "target": {"type": "string", "description": "Target domain or API"},
+                },
+                "required": ["amount_usd"],
             },
         ),
         Tool(
@@ -114,10 +88,8 @@ async def list_tools() -> list[Tool]:
             description="Immediately revoke agent access (Kill Switch).",
             inputSchema={
                 "type": "object",
-                "properties": {
-                    "agent_name": {"type": "string"},
-                },
-                "required": ["agent_name"],
+                "properties": {"reason": {"type": "string", "description": "Reason for kill"}},
+                "required": [],
             },
         ),
         Tool(
@@ -135,75 +107,47 @@ async def list_tools() -> list[Tool]:
 @app.call_tool()
 async def call_tool(name: str, arguments: dict) -> CallToolResult:
     if name == "create_session":
-        budget = BudgetGuard(daily_limit_usd=arguments["daily_limit_usd"])
-        trust = TrustRegistry(whitelist=arguments.get("whitelist", []))
-        anomaly = AnomalyGuard()
-        timelock = TimeLock(cooldown_seconds=arguments.get("cooldown_seconds", 60))
-        killswitch = KillSwitch()
-        audit = AuditChain()
-
-        _active_session = SafeAgent(
-            name=arguments["agent_name"],
-            guards=[budget, trust, anomaly, timelock, killswitch],
-            wallet=arguments["agent_wallet"],
-            audit_chain=audit,
-        )
-        _guards_config = {
-            "budget": budget,
-            "trust": trust,
-            "anomaly": anomaly,
-            "timelock": timelock,
-            "killswitch": killswitch,
-            "audit": audit,
-        }
-        _save_session()
-
+        session = _create_session(arguments)
         return CallToolResult(
             content=[TextContent(
                 type="text",
-                text=f"✅ Session created: {arguments['agent_name']}\nBudget: ${arguments['daily_limit_usd']}/day\nWhitelist: {arguments.get('whitelist', [])}"
+                text=f"✅ Session created\nBudget: ${arguments.get('daily_limit_usd', 20.0)}/day\nWhitelist: {arguments.get('whitelist', [])}"
             )]
         )
 
     if name == "check_budget":
-        if not _load_session():
-            return CallToolResult(
-                content=[TextContent(type="text", text="❌ No active session. Call create_session first.")]
-            )
-        status = _active_session.check_safety(
-            target=arguments.get("target", "unknown"),
-            amount_usd=arguments["amount_usd"],
-        )
+        session = _get_session()
+        target = arguments.get("target", "unknown")
+        amount = arguments["amount_usd"]
+        result = session.before_spend(to=target, amount=amount)
+        status_text = "✅ ALLOWED" if result.status == "APPROVED" else f"🚫 {result.status}"
         return CallToolResult(
             content=[TextContent(
                 type="text",
-                text=f"{'✅ ALLOWED' if status.allowed else '🚫 DENIED'}: {status.reason}\nRemaining: ${status.remaining}/day"
+                text=f"{status_text}: {result.reason}\nRemaining: ${session.budget.remaining:.2f}/day"
             )]
         )
 
     if name == "kill_session":
-        if not _load_session():
-            return CallToolResult(
-                content=[TextContent(type="text", text="❌ No active session")]
-            )
-        _guards_config["killswitch"].trigger()
-        _save_session()
-        return CallToolResult(
-            content=[TextContent(type="text", text=f"🛑 Kill switch triggered. Session revoked for {arguments['agent_name']}")]
-        )
-
-    if name == "audit_log":
-        if not _load_session():
-            return CallToolResult(
-                content=[TextContent(type="text", text="❌ No active session")]
-            )
-        audit = _guards_config["audit"]
-        root = audit.get_merkle_root()
-        logs = audit.get_recent_logs(10)
+        session = _get_session()
+        session.kill_switch.activate(arguments.get("reason", "manual"))
         return CallToolResult(
             content=[TextContent(
                 type="text",
-                text=f"🌳 Merkle Root: {root or 'Empty'}\n\nLast Logs:\n" + "\n".join(str(l) for l in logs)
+                text=f"🛑 Kill switch triggered. Reason: {arguments.get('reason', 'manual')}"
+            )]
+        )
+
+    if name == "audit_log":
+        session = _get_session()
+        audit = session.audit
+        root = audit.merkle_root
+        logs = audit.get_recent_logs(10)
+        log_lines = "\n".join(f"- {e['action']}: {e.get('details', {})}" for e in logs)
+        return CallToolResult(
+            content=[TextContent(
+                type="text",
+                text=f"🌳 Merkle Root: {root or 'Empty'}\n\nRecent Logs:\n{log_lines or '(no entries)'}"
             )]
         )
 

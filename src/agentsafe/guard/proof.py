@@ -9,9 +9,10 @@ import hashlib
 import json
 import time
 import hmac
-from typing import Dict, Any
+from typing import Dict, Any, TYPE_CHECKING
 
-from agentsafe.safe_agent import SafeAgent
+if TYPE_CHECKING:
+    from agentsafe.safe_agent import SafeAgent
 
 class SafetyProofGenerator:
     """Generates and verifies Safety Proofs for agent transactions."""
@@ -21,7 +22,7 @@ class SafetyProofGenerator:
     def __init__(self, secret_key: str = "agentsafe-v0.3-proof-key"):
         self.secret_key = secret_key
 
-    def generate(self, agent: SafeAgent, amount: float, to: str, action: str) -> Dict[str, Any]:
+    def generate(self, agent: "SafeAgent", amount: float, to: str, action: str) -> Dict[str, Any]:
         """Generate a signed Safety Proof indicating the agent is safe to spend."""
         ts = int(time.time())
         proof_body = {

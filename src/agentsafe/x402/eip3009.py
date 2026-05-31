@@ -8,7 +8,6 @@ Reference: https://eips.ethereum.org/EIPS/eip-3009
 
 from eth_account import Account
 from web3 import Web3
-from web3.middleware import SignAndSendRawMiddlewareBuilder
 from typing import Dict, Any
 import time
 
@@ -60,6 +59,40 @@ USDC_DOMAIN_DATA = {
 EIP3009_TYPE_HASH = Web3.keccak(
     text="TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)"
 ).hex()
+
+
+class EIP3009Transfer:
+    """Convenience wrapper for creating EIP-3009 transfer calldata."""
+
+    def __init__(
+        self,
+        from_address: str,
+        to_address: str,
+        value: int,
+        valid_after: int = 0,
+        valid_before: int = 9999999999,
+        nonce: bytes = b"\x00" * 32,
+    ):
+        self.from_address = from_address
+        self.to_address = to_address
+        self.value = value
+        self.valid_after = valid_after
+        self.valid_before = valid_before
+        self.nonce = nonce
+
+    def get_calldata(self) -> str:
+        """Encode the function call calldata for transferWithAuthorization."""
+        return encode(
+            ["address", "address", "uint256", "uint256", "uint256", "bytes32"],
+            [
+                Web3.to_checksum_address(self.from_address),
+                Web3.to_checksum_address(self.to_address),
+                self.value,
+                self.valid_after,
+                self.valid_before,
+                self.nonce,
+            ],
+        ).hex()
 
 
 def prepare_transfer_with_authorization(

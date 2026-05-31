@@ -101,12 +101,15 @@ class X402Client:
         response = requests.request(method, url, headers=headers, **kwargs)
 
         if response.status_code == 402:
-            if response.status_code != 402:
-                return response
-
             return self._handle_402(method, url, headers, response, **kwargs)
 
         return response
+
+    def handle_402(self, response_402, url, amount_usdc):
+        """Public convenience method for testing / direct API calls."""
+        return self._handle_402(
+            "GET", url, {}, response_402,
+        )
 
     def get(self, url, **kwargs) -> requests.Response:
         return self.request("GET", url, **kwargs)

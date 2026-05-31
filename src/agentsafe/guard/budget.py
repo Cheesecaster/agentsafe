@@ -41,6 +41,13 @@ class BudgetGuard:
         self._maybe_reset()
         return max(0.0, self.daily_limit - self._state["spent"])
 
+    def reset_daily(self) -> None:
+        """Force a budget reset (for testing or manual override)."""
+        self._state["spent"] = 0.0
+        self._state["count"] = 0
+        self._state["reset_at"] = self._next_midnight_utc()
+        self._save()
+
     @property
     def last_reset(self) -> float:
         return self._state["reset_at"]
