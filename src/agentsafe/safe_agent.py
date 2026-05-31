@@ -17,6 +17,7 @@ from .guard.kill_switch import KillSwitch
 from .guard.audit_chain import AuditChain
 from .guard.proof import SafetyProofGenerator
 from .guard.session_id import generate_session_id, format_agent_header
+from .guard.known_providers import is_known_provider, KNOWN_PROVIDERS
 
 
 @dataclass
@@ -143,8 +144,12 @@ class SafeAgent:
                 session_id=self._session_id,
             )
 
+        # Auto-trust known providers (LLM APIs, RPC, etc.)
+        if trust_status == "UNKNOWN" and is_known_provider(to):
+            self.trust.allow(to)  # Auto-promote to trusted
+
         # 3b. Unknown counterparty → ESCALATE
-        if trust_status == "UNKNOWN" and amount >= self._quiet_hours_max:
+        if trust_status == "UNKNOWN" and not is_known_provider(to) and amount >= self._quiet_hours_max:
             self._log("SPEND_ESCALATED", {
                 "to": to, "amount": amount, "action": action,
                 "session_id": self._session_id,
