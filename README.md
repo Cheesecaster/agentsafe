@@ -76,6 +76,29 @@ Zero-cost abstractions for high-frequency loops. Guards ported to Rust for <100n
 - Live monitor of agent sessions, spend, and health.
 - **Live Kill Switch** and limit adjustment directly from UI.
 
+### Base MCP Integration
+
+Connect `agentsafe` to any MCP-compatible agent (Claude Desktop, Base Agents, Cursor):
+
+```bash
+# Install MCP server
+pip install agentsafe[mcp]
+
+# Run as MCP server (stdio mode)
+agentsafe-mcp
+
+# Or use npx for Claude Desktop
+npx mcp install agentsafe
+```
+
+Agents connecting via MCP automatically get access to 4 safety tools:
+| Tool | Description |
+|------|-------------|
+| `create_session` | Set budget limits, whitelist, cooldowns |
+| `check_budget` | Validate spend before execution |
+| `kill_session` | Emergency revocation (Kill Switch) |
+| `audit_log` | View Merkle Audit Root & history |
+
 ## 💻 Usage
 
 ### Installation

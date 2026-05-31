@@ -1,34 +1,29 @@
-[build-system]
-requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.build_meta"
-
 [project]
 name = "agentsafe"
-version = "0.1.0"
-description = "The seatbelt for autonomous agents that spend money via x402"
+version = "0.4.0"
+description = "Autonomous Agent Safety Kit for x402 Payments & Base Mainnet"
 readme = "README.md"
-license = { text = "MIT" }
-requires-python = ">=3.12"
-authors = [{ name = "TomKet", email = "tomket@example.com" }]
-keywords = ["x402", "agent", "safety", "base", "usdc", "budget", "autonomous"]
-classifiers = [
-    "Development Status :: 3 - Alpha",
-    "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3.12",
-    "Topic :: Security",
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.30",
+    "eth-hash[pycryptodome]>=0.7",
+    "web3>=6.0",
 ]
 
 [project.optional-dependencies]
-x402 = ["web3>=6.0", "eth-account>=0.9"]
-cli = ["rich>=13.0", "click>=8.0"]
+cli = ["typer>=0.9", "rich>=13.0"]
 api = ["flask>=3.0"]
-full = ["agentsafe[x402,cli,api]"]
+x402 = ["eip712>=0.2", "eth-account>=0.11"]
+mcp = ["mcp>=1.0"]
+dev = ["pytest>=8.0", "ruff>=0.4", "mypy>=1.10"]
 
 [project.scripts]
-agentsafe = "agentsafe.cli:main"
+agentsafe = "agentsafe.cli.main:cli"
+agentsafe-mcp = "agentsafe.mcp.server:app"
 
-[tool.setuptools.packages.find]
-where = ["src"]
+[project.entry-points."mcp.servers"]
+agentsafe = "agentsafe.mcp.server:app"
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.backends._legacy:_Backend"
