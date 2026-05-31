@@ -63,10 +63,10 @@ Before an x402 payment is released, agentsafe generates a **Signed Safety Proof*
 This proof is attached to the x402 transaction, satisfying high-compliance environments.
 
 ### 4. 🤝 Smart Contracts (`contracts/`)
-On-chain enforcement on Base Mainnet:
-- `SessionGuard.sol`: Non-custodial session management with adjustable daily limits.
-- `EscrowSimple.sol`: USDC escrow for trusted x402 transactions.
-- `AgentRegistry.sol`: DID-style identity for verified agents.
+On-chain enforcement on Base Mainnet (Gas-optimized, storage-packed):
+- `SessionGuard.sol`: Non-custodial session mgmt + daily limits. `ReentrancyGuard` + `SafeERC20` + `deposit/withdraw` for fund management.
+- `EscrowSimple.sol`: x402 escrow with buyer-release, timeout-refund, and **seller auto-claim** fallback.
+- `AgentRegistry.sol`: DID-style identity with trust scores (0-100) and metadata (IPFS/Arweave refs).
 
 ### 5. ⚡ Rust Core (`crates/agentsafe-core/`)
 Zero-cost abstractions for high-frequency loops. Guards ported to Rust for <100ns latency and zero allocation.
