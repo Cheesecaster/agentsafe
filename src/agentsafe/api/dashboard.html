@@ -3,626 +3,305 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>agentsafe — Dashboard</title>
+    <title>agentsafe — Live Control Center</title>
+    <!-- Web3 & Ethers for Base Mainnet interaction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.9.0/ethers.umd.js"></script>
     <style>
         :root {
             --blue-500: #0052FF;
             --blue-600: #0040CC;
-            --blue-700: #003399;
             --gray-50: #F8F9FA;
             --gray-100: #F0F1F3;
             --gray-200: #E3E5E9;
-            --gray-400: #9FA6B0;
             --gray-600: #576070;
             --gray-800: #20242B;
-            --red-500: #EF4444;
-            --red-600: #DC2626;
             --green-500: #22C55E;
             --green-600: #16A34A;
+            --red-500: #EF4444;
+            --red-600: #DC2626;
             --yellow-500: #EAB308;
             --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
             --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
             --radius: 10px;
+            --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-800); min-height: 100vh; }
+        
+        .header { background: white; border-bottom: 1px solid var(--gray-200); padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+        .header h1 { font-size: 18px; font-weight: 600; }
+        .badge { padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
+        .badge-connect { background: var(--blue-500); color: white; }
+        .badge-connect:hover { background: var(--blue-600); }
+        .badge-connected { background: var(--green-600); color: white; cursor: default; }
+        
+        .status-badge { background: #ECFDF5; color: var(--green-600); padding: 6px 14px; border-radius: 20px; font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+        .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-500); }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: var(--gray-50);
-            color: var(--gray-800);
-            min-height: 100vh;
-        }
+        .container { max-width: 1200px; margin: 0 auto; padding: 24px; }
+        
+        .alert-box { background: #FEF9E7; border: 1px solid #FDE047; border-radius: var(--radius); padding: 16px; margin-bottom: 24px; display: none; }
+        .alert-box.active { display: block; }
+        .alert-title { font-weight: 600; color: #854D0E; margin-bottom: 4px; }
+        .alert-text { color: #A18300; font-size: 14px; }
 
-        /* ── Header ─────────────────────────────── */
-        .header {
-            background: white;
-            border-bottom: 1px solid var(--gray-200);
-            padding: 16px 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-
-        .header-left {
-            display: flex;
-            align-items: center;
-            gap: 12px;
-        }
-
-        .logo {
-            width: 32px;
-            height: 32px;
-            background: var(--blue-500);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: white;
-            font-weight: 700;
-            font-size: 14px;
-        }
-
-        .header h1 {
-            font-size: 18px;
-            font-weight: 600;
-            color: var(--gray-800);
-        }
-
-        .header h1 span {
-            color: var(--gray-400);
-            font-weight: 400;
-            margin-left: 6px;
-            font-size: 14px;
-        }
-
-        .status-badge {
-            padding: 6px 14px;
-            border-radius: 20px;
-            font-size: 13px;
-            font-weight: 600;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-
-        .status-active {
-            background: #ECFDF5;
-            color: var(--green-600);
-        }
-
-        .status-paused {
-            background: #FEF2F2;
-            color: var(--red-600);
-        }
-
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-        }
-
-        .status-active .status-dot { background: var(--green-500); }
-        .status-paused .status-dot { background: var(--red-500); }
-
-        /* ── Container ──────────────────────────── */
-        .container {
-            max-width: 1200px;
-            margin: 0 auto;
-            padding: 24px;
-        }
-
-        /* ── Cards ──────────────────────────────── */
-        .grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-            gap: 16px;
-            margin-bottom: 24px;
-        }
-
-        .card {
-            background: white;
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius);
-            padding: 20px;
-            box-shadow: var(--shadow-sm);
-            transition: box-shadow 0.15s ease;
-        }
-
-        .card:hover {
-            box-shadow: var(--shadow-md);
-        }
-
-        .card-label {
-            font-size: 13px;
-            color: var(--gray-600);
-            font-weight: 500;
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            margin-bottom: 8px;
-        }
-
-        .card-value {
-            font-size: 28px;
-            font-weight: 700;
-            color: var(--gray-800);
-            line-height: 1.1;
-        }
-
-        .card-sub {
-            font-size: 12px;
-            color: var(--gray-600);
-            margin-top: 6px;
-        }
-
-        .card-icon {
-            width: 36px;
-            height: 36px;
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            margin-bottom: 12px;
-        }
-
-        .card-icon.blue { background: #EBF1FF; }
-        .card-icon.green { background: #ECFDF5; }
-        .card-icon.red { background: #FEF2F2; }
-        .card-icon.yellow { background: #FEF9E7; }
-
-        /* ── Progress bar ───────────────────────── */
-        .progress-bar {
-            height: 6px;
-            background: var(--gray-100);
-            border-radius: 3px;
-            margin-top: 12px;
-            overflow: hidden;
-        }
-
-        .progress-fill {
-            height: 100%;
-            background: var(--blue-500);
-            border-radius: 3px;
-            transition: width 0.5s ease;
-        }
-
-        .progress-fill.warning { background: var(--yellow-500); }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin-bottom: 24px; }
+        .card { background: white; border: 1px solid var(--gray-200); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow-sm); }
+        .card-label { font-size: 13px; color: var(--gray-600); font-weight: 500; margin-bottom: 8px; }
+        .card-value { font-size: 28px; font-weight: 700; color: var(--gray-800); line-height: 1.1; margin-bottom: 4px; }
+        .card-sub { font-size: 12px; color: var(--gray-600); }
+        
+        .progress-bar { height: 6px; background: var(--gray-100); border-radius: 3px; margin-top: 12px; overflow: hidden; }
+        .progress-fill { height: 100%; background: var(--blue-500); border-radius: 3px; transition: width 0.5s ease; }
         .progress-fill.danger { background: var(--red-500); }
 
-        /* ── Kill Switch ────────────────────────── */
-        .killswitch-section {
-            background: white;
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius);
-            padding: 20px;
-            margin-bottom: 24px;
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            box-shadow: var(--shadow-sm);
-        }
-
-        .killswitch-label {
-            font-size: 14px;
-            font-weight: 600;
-        }
-
-        .killswitch-reason {
-            font-size: 12px;
-            color: var(--gray-600);
-            margin-top: 2px;
-        }
-
-        .btn {
-            padding: 10px 20px;
-            border: none;
-            border-radius: 8px;
-            font-size: 14px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.15s;
-        }
-
-        .btn-blue {
-            background: var(--blue-500);
-            color: white;
-        }
-        .btn-blue:hover { background: var(--blue-600); }
-
-        .btn-red {
-            background: var(--red-500);
-            color: white;
-        }
-        .btn-red:hover { background: var(--red-600); }
-
-        .btn-outline {
-            background: white;
-            border: 1px solid var(--gray-200);
-            color: var(--gray-600);
-        }
-        .btn-outline:hover {
-            background: var(--gray-50);
-            border-color: var(--blue-500);
-            color: var(--blue-500);
-        }
-
-        /* ── Audit Log ──────────────────────────── */
-        .audit-section {
-            background: white;
-            border: 1px solid var(--gray-200);
-            border-radius: var(--radius);
-            overflow: hidden;
-            box-shadow: var(--shadow-sm);
-            margin-bottom: 24px;
-        }
-
-        .audit-header {
-            padding: 16px 20px;
-            border-bottom: 1px solid var(--gray-200);
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-        }
-
-        .audit-header h3 {
-            font-size: 15px;
-            font-weight: 600;
-        }
-
-        .audit-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-
-        .audit-table th {
-            text-align: left;
-            padding: 10px 20px;
-            font-size: 12px;
-            font-weight: 600;
-            color: var(--gray-600);
-            text-transform: uppercase;
-            letter-spacing: 0.04em;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .audit-table td {
-            padding: 10px 20px;
-            font-size: 13px;
-            color: var(--gray-800);
-            border-bottom: 1px solid var(--gray-100);
-        }
-
-        .audit-table tr:last-child td { border-bottom: none; }
-
-        .status-label {
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-size: 11px;
-            font-weight: 600;
-        }
-
-        .status-approved { background: #ECFDF5; color: var(--green-600); }
-        .status-denied { background: #FEF2F2; color: var(--red-600); }
-        .status-escalated { background: #FEF9E7; color: #A18300; }
-
-        .verified-badge {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-            font-size: 12px;
-        }
-
-        .verified-badge.ok { color: var(--green-600); }
-        .verified-badge.fail { color: var(--red-600); }
-
-        /* ── Trust Stats ────────────────────────── */
-        .trust-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 12px;
-        }
-
-        .trust-item {
-            text-align: center;
-            padding: 12px;
-            border-radius: 8px;
-        }
-
-        .trust-item .num {
-            font-size: 24px;
-            font-weight: 700;
-        }
-
-        .trust-item.green { background: #ECFDF5; color: var(--green-600); }
-        .trust-item.red { background: #FEF2F2; color: var(--red-600); }
-        .trust-item.yellow { background: #FEF9E7; color: #A18300; }
-
-        /* ── Loading spinner ────────────────────── */
-        .spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid var(--gray-200);
-            border-top-color: var(--blue-500);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            display: inline-block;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        /* ── Responsive ─────────────────────────── */
-        @media (max-width: 768px) {
-            .grid { grid-template-columns: 1fr; }
-            .trust-grid { grid-template-columns: repeat(3, 1fr); }
-            .container { padding: 16px; }
-            .header { padding: 12px 16px; }
-        }
+        .input-group { margin-bottom: 16px; }
+        .input-label { font-size: 13px; font-weight: 600; color: var(--gray-600); margin-bottom: 6px; display: block; }
+        .input-field { width: 100%; padding: 10px; border: 1px solid var(--gray-200); border-radius: 8px; font-size: 14px; font-family: var(--font-mono); }
+        .input-field:focus { outline: none; border-color: var(--blue-500); }
+        
+        .controls { display: flex; gap: 12px; margin-top: 16px; }
+        .btn { padding: 10px 20px; border: none; border-radius: 8px; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.15s; }
+        .btn-primary { background: var(--blue-500); color: white; }
+        .btn-primary:hover { background: var(--blue-600); }
+        .btn-outline { background: white; border: 1px solid var(--gray-200); color: var(--gray-600); }
+        .btn-outline:hover { background: var(--gray-50); border-color: var(--blue-500); color: var(--blue-500); }
+        .btn-danger { background: var(--red-500); color: white; }
+        
+        .table { width: 100%; background: white; border: 1px solid var(--gray-200); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
+        .th { padding: 12px 16px; font-size: 12px; font-weight: 600; color: var(--gray-600); text-transform: uppercase; border-bottom: 1px solid var(--gray-200); text-align: left; }
+        .td { padding: 12px 16px; font-size: 13px; color: var(--gray-800); border-bottom: 1px solid var(--gray-100); }
+        .code { font-family: var(--font-mono); background: var(--gray-100); padding: 2px 6px; border-radius: 4px; color: var(--gray-800); }
+        
+        .spinner { width: 16px; height: 16px; border: 2px solid var(--gray-200); border-top-color: var(--blue-500); border-radius: 50%; animation: spin 0.8s linear infinite; display: inline-block; }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-    <!-- Header -->
-    <div class="header">
-        <div class="header-left">
-            <div class="logo">⚡</div>
-            <h1>agentsafe<span>v0.2 Dashboard</span></h1>
+
+<div class="header">
+    <h1>agentsafe <span style="color: var(--gray-600); font-weight: 400; font-size: 14px;">v0.3.0 Live Control Center</span></h1>
+    <div id="connectBtn" class="badge badge-connect" onclick="connectToBase()">🔗 Connect Wallet</div>
+</div>
+
+<div class="container">
+    
+    <div id="alertBox" class="alert-box">
+        <div id="alertTitle" class="alert-title">⚠️ Agent Paused</div>
+        <div id="alertText" class="alert-text">Emergency: Daily spending limit exceeded.</div>
+    </div>
+
+    <!-- Stats Grid -->
+    <div class="grid">
+        <!-- Wallet Balance -->
+        <div class="card">
+            <div class="card-label">Wallet Balance</div>
+            <div id="walletBalance" class="card-value">—</div>
+            <div class="card-sub">USDC on Base Mainnet</div>
         </div>
-        <div id="statusBadge" class="status-badge status-active">
-            <span class="status-dot"></span>
-            <span id="statusText">ACTIVE</span>
+
+        <!-- Session Cap -->
+        <div class="card">
+            <div class="card-label">Daily Cap</div>
+            <div id="sessionCap" class="card-value">—</div>
+            <div class="card-sub" id="sessionStatus">Status: Connecting...</div>
+            <div class="progress-bar">
+                <div id="capProgress" class="progress-fill" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="card">
+            <div class="card-label">Session Controls</div>
+            <div class="card-value" style="font-size: 18px; margin-top: 8px;">Manage Agent Limits</div>
+            <div class="input-group" style="margin-top: 12px;">
+                <label class="input-label">Agent Address</label>
+                <input id="agentKey" class="input-field" placeholder="0x..." value="0x0000000000000000000000000000000000000000">
+            </div>
+            <div class="controls">
+                <button class="btn btn-primary" onclick="updateLimit()">💰 Set Limit ($20)</button>
+                <button class="btn btn-danger" onclick="revokeAgent()">⛔ Kill Switch</button>
+            </div>
         </div>
     </div>
 
-    <div class="container">
-        <!-- Kill Switch -->
-        <div id="killswitch" class="killswitch-section" style="display:none;">
-            <div>
-                <div class="killswitch-label">⛔ Agent Paused</div>
-                <div id="ksReason" class="killswitch-reason"></div>
-            </div>
-            <button class="btn btn-blue" onclick="resumeAgent()">Resume Agent</button>
+    <!-- Audit Table -->
+    <div class="table">
+        <div style="display: flex; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--gray-200); background: white;">
+            <h3 style="font-size: 15px; font-weight: 600;">📋 Local Audit Chain</h3>
+            <span class="badge" style="background: var(--gray-100); cursor: default;" onclick="renderAudit()">🔄 Refresh</span>
         </div>
-
-        <!-- Status Grid -->
-        <div class="grid">
-            <div class="card">
-                <div class="card-icon blue">💰</div>
-                <div class="card-label">Daily Budget</div>
-                <div id="budgetVal" class="card-value">$0.00</div>
-                <div id="budgetSub" class="card-sub">Spent today: $0.00 / $0.00</div>
-                <div class="progress-bar">
-                    <div id="budgetProgress" class="progress-fill" style="width: 0%"></div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-icon green">🤝</div>
-                <div class="card-label">Trust Registry</div>
-                <div id="trustGrid" class="trust-grid">
-                    <div class="trust-item green">
-                        <div id="trustTrusted" class="num">0</div>
-                        <div style="font-size:11px">Trusted</div>
-                    </div>
-                    <div class="trust-item red">
-                        <div id="trustBlocked" class="num">0</div>
-                        <div style="font-size:11px">Blocked</div>
-                    </div>
-                    <div class="trust-item yellow">
-                        <div id="trustUnknown" class="num">0</div>
-                        <div style="font-size:11px">Unknown</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-icon yellow">📊</div>
-                <div class="card-label">Audit Chain</div>
-                <div id="auditCount" class="card-value">0</div>
-                <div class="card-sub">Total entries logged</div>
-                <div id="auditVerified" class="card-sub" style="margin-top:8px;">
-                    <span class="spinner"></span> Verifying...
-                </div>
-            </div>
-
-            <div class="card">
-                <div class="card-icon red">🛡️</div>
-                <div class="card-label">Guards Active</div>
-                <div class="card-value">6/6</div>
-                <div class="card-sub">Budget · Trust · Anomaly · Time · Behavior · Kill</div>
-            </div>
+        <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 1fr; padding: 10px 16px; font-size: 11px; font-weight: 600; color: var(--gray-600); background: var(--gray-50); border-bottom: 1px solid var(--gray-200);">
+            <span>TIME</span><span>ACTION</span><span>TARGET</span><span>AMOUNT</span><span>STATUS</span>
         </div>
-
-        <!-- Audit Log -->
-        <div class="audit-section">
-            <div class="audit-header">
-                <h3>📋 Audit Log</h3>
-                <div style="display:flex; gap:8px; align-items:center;">
-                    <select id="auditHours" onchange="loadAudit()">
-                        <option value="1">1 hour</option>
-                        <option value="6">6 hours</option>
-                        <option value="24" selected>24 hours</option>
-                        <option value="72">3 days</option>
-                    </select>
-                    <button class="btn btn-outline" onclick="loadAudit()">Refresh</button>
-                </div>
-            </div>
-            <table class="audit-table">
-                <thead>
-                    <tr>
-                        <th>Time</th>
-                        <th>Action</th>
-                        <th>Counterparty</th>
-                        <th>Amount</th>
-                        <th>Status</th>
-                    </tr>
-                </thead>
-                <tbody id="auditBody">
-                    <tr><td colspan="5" style="text-align:center; color: var(--gray-400); padding:32px;">
-                        <span class="spinner"></span> Loading audit log...
-                    </td></tr>
-                </tbody>
-            </table>
+        <div id="auditRows" style="background: white;">
+            <div style="padding: 24px; text-align: center; color: var(--gray-600);">Loading from local state server...</div>
         </div>
     </div>
+</div>
 
-    <script>
-        // ── API Configuration ─────────────────────────────────────
-        const API_BASE = window.location.origin + '/api/v1';
-        const POLL_INTERVAL = 10000; // 10s
+<script>
+    // ── Constants ─────────────────────────────────────────────────────────────
+    // SessionGuard Contract Address (Base Mainnet placeholder)
+    // You must deploy SessionGuard.sol and replace this address.
+    const CONTRACT_ADDRESS = "0x0000000000000000000000000000000000000000"; 
+    
+    // Minimal ABI for interaction
+    const CONTRACT_ABI = [
+        "function getSession(address) view returns (uint256 limit, uint256 spent, uint256 remaining, uint256 expiresAt)",
+        "function updateDailyLimit(address key, uint256 newLimit)",
+        "function revoke(address key)"
+    ];
 
-        // ── Format helpers ─────────────────────────────────────────
-        function formatTime(ts) {
-            if (!ts) return '—';
-            const d = new Date(ts * 1000);
-            return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-        }
+    let provider, signer;
 
-        function formatUSD(val) {
-            return '$' + parseFloat(val).toFixed(2);
-        }
-
-        // ── Load status ────────────────────────────────────────────
-        async function loadStatus() {
+    // ── Connection ───────────────────────────────────────────────────────────
+    async function connectToBase() {
+        if (typeof window.ethereum !== "undefined") {
             try {
-                const [statusRes, trustRes] = await Promise.all([
-                    fetch(API_BASE + '/status'),
-                    fetch(API_BASE + '/trust'),
-                ]);
+                provider = new ethers.BrowserProvider(window.ethereum);
+                await provider.send("eth_requestAccounts", []);
+                signer = await provider.getSigner();
+                const balance = await provider.getBalance(signer.getAddress());
+                
+                // Switch to Base Network if needed
+                // await window.ethereum.request({ method: 'wallet_switchEthereumChain', params: [{ chainId: '0x2105' }] });
 
-                const status = await statusRes.json();
-                const trust = await trustRes.json();
-
-                // Kill switch
-                const ks = document.getElementById('killswitch');
-                const badge = document.getElementById('statusBadge');
-                const statusText = document.getElementById('statusText');
-
-                if (status.kill_switch) {
-                    ks.style.display = 'flex';
-                    document.getElementById('ksReason').textContent = status.kill_switch ? 'Paused at ' + new Date(status.kill_switch).toLocaleTimeString() : '';
-                    badge.className = 'status-badge status-paused';
-                    statusText.textContent = 'PAUSED';
-                } else {
-                    ks.style.display = 'none';
-                    badge.className = 'status-badge status-active';
-                    statusText.textContent = 'ACTIVE';
-                }
-
-                // Budget card
-                const budget = parseFloat(status.spent_today) || 0;
-                const limit = parseFloat(status.daily_budget) || 0;
-                const remaining = parseFloat(status.remaining) || 0;
-                const pct = limit > 0 ? (budget / limit) * 100 : 0;
-
-                document.getElementById('budgetVal').textContent = formatUSD(remaining);
-                document.getElementById('budgetSub').textContent = `${formatUSD(budget)} / ${formatUSD(limit)}`;
-
-                const progressBar = document.getElementById('budgetProgress');
-                progressBar.style.width = Math.min(pct, 100) + '%';
-                progressBar.className = 'progress-fill' +
-                    (pct > 90 ? ' danger' : pct > 70 ? ' warning' : '');
-
-                // Trust card
-                document.getElementById('trustTrusted').textContent = trust.trusted || 0;
-                document.getElementById('trustBlocked').textContent = trust.blocked || 0;
-                document.getElementById('trustUnknown').textContent = trust.unknown_pending || 0;
-
-                // Audit card
-                document.getElementById('auditCount').textContent = status.audit_entries || 0;
-
+                // Update UI
+                document.getElementById('connectBtn').className = 'badge badge-connected';
+                document.getElementById('connectBtn').innerText = '⚡ Connected (Base)';
+                document.getElementById('walletBalance').innerText = parseFloat(ethers.formatEther(balance)).toFixed(4) + ' ETH';
+                
+                loadSessionInfo();
             } catch (err) {
-                console.error('Status load error:', err);
+                console.error("Connection failed:", err);
+                alert("Connection failed. Check console.");
             }
+        } else {
+            alert("No wallet found. Install MetaMask or Base Wallet.");
         }
+    }
 
-        // ── Load audit ─────────────────────────────────────────────
-        async function loadAudit() {
-            const hours = document.getElementById('auditHours').value;
-            try {
-                const res = await fetch(API_BASE + '/audit/' + hours);
-                const data = await res.json();
+    // ── Session Logic ────────────────────────────────────────────────────────
+    async function loadSessionInfo() {
+        if (!signer) return;
+        const agentKey = document.getElementById('agentKey').value;
+        document.getElementById('sessionStatus').innerText = 'Status: Fetching...';
 
-                const tbody = document.getElementById('auditBody');
-
-                if (!data.entries || data.entries.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color: var(--gray-400); padding:32px;">No audit entries in this period</td></tr>';
-                    return;
-                }
-
-                // Verification badge
-                const verifiedEl = document.getElementById('auditVerified');
-                verifiedEl.innerHTML = data.verified
-                    ? '✅ Chain verified (tamper-evident)'
-                    : '❌ Chain tampered!';
-                verifiedEl.className = 'card-sub ' + (data.verified ? 'ok' : 'fail');
-
-                // Table rows
-                tbody.innerHTML = data.entries.slice(-50).reverse().map(e => {
-                    const statusClass = e.action.includes('approved') ? 'status-approved' :
-                                       e.action.includes('deny') ? 'status-denied' :
-                                       e.action.includes('escalate') ? 'status-escalated' : '';
-                    const statusText = e.action.includes('approved') ? 'APPROVED' :
-                                      e.action.includes('deny') ? 'DENIED' :
-                                      e.action.includes('escalate') ? 'ESCALATE' : e.action;
-
-                    return `<tr>
-                        <td>${formatTime(e.ts)}</td>
-                        <td><code>${e.action.replace(/_/g, ' ')}</code></td>
-                        <td>${e.details?.to || '—'}</td>
-                        <td>${e.details?.amount ? formatUSD(e.details.amount) : '—'}</td>
-                        <td><span class="status-label ${statusClass}">${statusText}</span></td>
-                    </tr>`;
-                }).join('');
-
-            } catch (err) {
-                document.getElementById('auditBody').innerHTML =
-                    '<tr><td colspan="5" style="text-align:center; color: var(--gray-400); padding:32px;">Failed to load audit log</td></tr>';
+        try {
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, provider);
+            // Fallback mock data if contract address is empty (for UI demo)
+            if (CONTRACT_ADDRESS === "0x0000000000000000000000000000000000000000") {
+                const mockLimit = 20_000_000; // $20
+                const mockSpent = 4_500_000;  // $4.50
+                const mockRemaining = mockLimit - mockSpent;
+                updateSessionUI(mockLimit, mockSpent, mockRemaining);
+                document.getElementById('sessionStatus').innerText = 'Status: Active (Demo Mode)';
+                return;
             }
-        }
 
-        // ── Kill switch controls ───────────────────────────────────
-        async function resumeAgent() {
-            try {
-                await fetch(API_BASE + '/pause', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'resume' })
-                });
-                loadStatus();
-                loadAudit();
-            } catch (err) {
-                console.error('Resume error:', err);
-                alert('Failed to resume agent');
+            const [limit, spent, remaining, expiresAt] = await contract.getSession(agentKey);
+            updateSessionUI(limit, spent, remaining);
+        } catch (err) {
+            console.error("Contract read failed:", err);
+            document.getElementById('sessionStatus').innerText = 'Status: Error (Check Contract Address)';
+        }
+    }
+
+    function updateSessionUI(limit, spent, remaining) {
+        limit = Number(limit);
+        spent = Number(spent);
+        remaining = Number(remaining);
+        
+        const limitUsd = (limit / 1_000_000).toFixed(2);
+        const spentUsd = (spent / 1_000_000).toFixed(2);
+        
+        document.getElementById('sessionCap').innerText = `$${limitUsd}`;
+        document.getElementById('sessionStatus').innerText = `Spent: $${spentUsd}`;
+        
+        const pct = limit > 0 ? (spent / limit) * 100 : 0;
+        document.getElementById('capProgress').style.width = `${Math.min(pct, 100)}%`;
+        if (pct > 90) document.getElementById('capProgress').className = 'progress-fill danger';
+    }
+
+    // ── Actions ───────────────────────────────────────────────────────────────────
+    async function updateLimit() {
+        if (!signer) return alert("Connect Wallet First!");
+        
+        const agentKey = document.getElementById('agentKey').value;
+        if (agentKey === "0x0000000000000000000000000000000000000000") return alert("Enter Agent Key");
+
+        // Set to $20 (20 USDC * 6 decimals)
+        const newLimitWei = "20000000"; 
+        
+        try {
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            const tx = await contract.updateDailyLimit(agentKey, newLimitWei);
+            document.getElementById('sessionStatus').innerText = 'Status: Tx Sent... ✍️';
+            await tx.wait();
+            document.getElementById('sessionStatus').innerText = '✅ Limit Updated!';
+            loadSessionInfo();
+        } catch (err) {
+            console.error(err);
+            alert("Transaction failed. Ensure SessionGuard is deployed and you are Owner.");
+        }
+    }
+
+    async function revokeAgent() {
+        if (!signer) return alert("Connect Wallet First!");
+        if (!confirm("⛔ Are you sure? This will kill the agent's spending access immediately.")) return;
+
+        const agentKey = document.getElementById('agentKey').value;
+        
+        try {
+            const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+            const tx = await contract.revoke(agentKey);
+            document.getElementById('sessionStatus').innerText = 'Status: Killing... 💀';
+            await tx.wait();
+            document.getElementById('sessionStatus').innerText = '⛔ REKED. Agent Paused.';
+            document.getElementById('alertBox').className = 'alert-box active';
+        } catch (err) {
+            console.error(err);
+            alert("Revoke failed.");
+        }
+    }
+
+    // ── Local Audit Data Loading ──────────────────────────────────────────────
+    async function renderAudit() {
+        try {
+            // In v0.3, dashboard pulls from /api/v1/audit/24
+            const res = await fetch('./api/v1/audit/24');
+            const data = await res.json();
+            
+            const container = document.getElementById('auditRows');
+            if (!data.entries || data.entries.length === 0) {
+                container.innerHTML = '<div style="padding: 16px; text-align: center; color: var(--gray-600);">No recent transactions in local log.</div>';
+                return;
             }
-        }
 
-        async function pauseAgent() {
-            const reason = prompt('Reason for pausing:', 'owner command');
-            if (!reason) return;
-            try {
-                await fetch(API_BASE + '/pause', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ reason })
-                });
-                loadStatus();
-                loadAudit();
-            } catch (err) {
-                console.error('Pause error:', err);
-                alert('Failed to pause agent');
-            }
-        }
+            container.innerHTML = data.entries.slice(-10).reverse().map(e => {
+                const ts = new Date(e.ts * 1000).toLocaleTimeString();
+                const statusClass = e.action.includes("approve") ? "status-approved" : 
+                                   e.action.includes("deny") ? "status-denied" : "status-warning";
+                return `<div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 1fr; padding: 12px 16px; font-size: 13px; border-bottom: 1px solid var(--gray-100);">
+                    <span class="td">${ts}</span>
+                    <span class="td"><span class="code">${e.action.replace(/_/g, ' ')}</span></span>
+                    <span class="td">${e.details?.to || '—'}</span>
+                    <span class="td">${e.details?.amount ? '$' + Number(e.details.amount).toFixed(2) : '—'}</span>
+                    <span class="td"><span class="${statusClass}">${e.action.includes("approve") ? "APPROVED" : e.action.includes("deny") ? "DENIED" : "LOG"}</span></span>
+                </div>`;
+            }).join('');
 
-        // ── Init ───────────────────────────────────────────────────
-        loadStatus();
-        loadAudit();
-        setInterval(() => { loadStatus(); loadAudit(); }, POLL_INTERVAL);
-    </script>
+        } catch (err) {
+            console.error("Audit load err:", err);
+            document.getElementById('auditRows').innerHTML = '<div style="padding: 16px; text-align: center; color: var(--red-500);">Failed to load audit log.</div>';
+        }
+    }
+    
+    // Initial load
+    setTimeout(renderAudit, 500);
+</script>
+
 </body>
 </html>
