@@ -1,6 +1,7 @@
 """agentsafe — The seatbelt for autonomous agents that spend money via x402."""
 
 from .safe_agent import SafeAgent, SpendResult
+from .sdk_client import AgentsafeClient, X402Response
 from .guard.budget import BudgetGuard
 from .guard.trust import TrustRegistry
 from .guard.anomaly import AnomalyGuard
@@ -19,6 +20,7 @@ except ImportError:
 __version__ = "0.3.0"
 __all__ = [
     "SafeAgent", "SpendResult",
+    "AgentsafeClient", "X402Response",
     "BudgetGuard", "TrustRegistry", "AnomalyGuard",
     "TimeLock", "BehaviorHash", "KillSwitch", "AuditChain",
     "X402Client", "X402PaymentError",
