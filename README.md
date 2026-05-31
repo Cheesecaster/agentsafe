@@ -140,7 +140,7 @@ Built on **Base Mainnet** with **x402** protocol for gasless USDC micropayments.
 </p>
 
 <p align="center">
-  <strong>Credits by <a href="https://github.com/TomKet">TomKet</a></strong>
+  <strong>Credits by <a href="https://x.com/gerryfishers">TomKet</a></strong>
 </p>
 
 ## 📄 License
