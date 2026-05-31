@@ -195,10 +195,10 @@ agent.kill_switch.activate("suspicious spending pattern")
 │                                     │
 │  before_spend()                     │
 │  ├── 1. KillSwitch     → paused?    │
-│  ├── 2. TrustGuard     → tin cậy?   │
-│  ├── 3. BudgetGuard    → đủ tiền?   │
-│  ├── 4. TimeLock       → giờ lạ?    │
-│  ├── 5. AnomalyGuard   → aneh?      │
+│  ├── 2. TrustGuard     → trusted?   │
+│  ├── 3. BudgetGuard    → within budget? │
+│  ├── 4. TimeLock       → quiet hours? │
+│  ├── 5. AnomalyGuard   → anomalous? │
 │  └── 6. AuditChain     → log hash   │
 │                                     │
 │  → APPROVED / ESCALATE / DENIED     │
