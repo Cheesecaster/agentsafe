@@ -1,58 +1,64 @@
-"""KillSwitch — owner-controlled agent pause/resume."""
+"""KillSwitch — emergency circuit breaker for the agent."""
 
 import json
-import time
-from pathlib import Path
+import os
 
 
 class KillSwitch:
-    """Owner-controlled pause/resume mechanism for agent spending.
+    """Hard-stop mechanism. Once activated, all spends are blocked.
 
-    Once activated, all before_spend() calls return DENIED.
-    The agent cannot resume itself — only the owner can.
-
-    State is persisted to disk so it survives restarts.
+    Args:
+        storage_path: Directory for persisting state.
     """
 
-    def __init__(self, storage_path: str = "kill_switch.json"):
-        self._storage = Path(storage_path)
-        self._state = self._load()
+    def __init__(self, storage_path: str = ""):
+        self._active = False
+        self._reason = ""
+        self._storage_path = storage_path
+        self._state_file = os.path.join(storage_path, "killswitch.json") if storage_path else ""
+        self._try_load()
 
-    @property
+    def _try_load(self) -> None:
+        if self._state_file and os.path.exists(self._state_file):
+            try:
+                with open(self._state_file) as f:
+                    state = json.load(f)
+                self._active = state.get("active", False)
+                self._reason = state.get("reason", "")
+            except (json.JSONDecodeError, IOError):
+                pass
+
+    def _try_save(self) -> None:
+        if self._state_file:
+            try:
+                with open(self._state_file, "w") as f:
+                    json.dump({
+                        "active": self._active,
+                        "reason": self._reason,
+                    }, f)
+            except IOError:
+                pass
+
+    def activate(self, reason: str = "Manual kill") -> None:
+        """Activate the kill switch."""
+        self._active = True
+        self._reason = reason
+        self._try_save()
+
+    def deactivate(self) -> None:
+        """Deactivate the kill switch."""
+        self._active = False
+        self._reason = ""
+        self._try_save()
+
+    def resume(self) -> None:
+        """Alias for deactivate() — resume the agent after kill."""
+        self.deactivate()
+
     def is_active(self) -> bool:
-        return self._state.get("active", False)
+        """Check whether the kill switch is active (callable method)."""
+        return self._active
 
     @property
     def reason(self) -> str:
-        return self._state.get("reason", "")
-
-    @property
-    def activated_at(self) -> float:
-        return self._state.get("activated_at", 0)
-
-    def activate(self, reason: str = "owner command") -> None:
-        """Activate the kill switch. Agent is now paused."""
-        self._state["active"] = True
-        self._state["reason"] = reason
-        self._state["activated_at"] = time.time()
-        self._save()
-
-    def resume(self) -> None:
-        """Resume agent spending. Only callable by owner (not enforced by library)."""
-        self._state["active"] = False
-        self._state["reason"] = ""
-        self._state["activated_at"] = 0
-        self._save()
-
-    def _load(self) -> dict:
-        if self._storage.exists():
-            try:
-                with open(self._storage) as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
-        return {"active": False, "reason": "", "activated_at": 0}
-
-    def _save(self) -> None:
-        with open(self._storage, "w") as f:
-            json.dump(self._state, f, indent=2)
+        return self._reason

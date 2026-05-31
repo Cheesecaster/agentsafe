@@ -1,1 +1,1 @@
-"""agentsafe MCP server module."""
+"""MCP server module for agentsafe."""

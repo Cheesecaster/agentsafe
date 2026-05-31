@@ -1,1 +1,1 @@
-"""agentsafe FastAPI surface (planned for v0.3)."""
+"""API module for agentsafe."""

@@ -1,79 +1,87 @@
-"""BudgetGuard — daily spending cap with auto-reset."""
+"""Budget guard — enforces daily spending limits."""
 
 import json
 import os
-import time
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import date
 
 
 class BudgetGuard:
-    """Enforces a daily spending cap. Non-overridable by the agent.
+    """Guards against exceeding a daily budget limit."""
 
-    The cap resets at midnight UTC. When budget is exhausted, the agent
-    gracefully falls back to free mode — no error is thrown.
-    """
-
-    def __init__(self, daily_limit: float = 0.50, storage_path: str = "budget.json"):
+    def __init__(self, daily_limit: float = 20.0, storage_path: str = None):
         self.daily_limit = daily_limit
-        self._storage = Path(storage_path)
-        self._state = self._load()
+        self.storage_path = storage_path
+        self._spent_today = 0.0
+        self._date_key = date.today().isoformat()
+        self._load_state()
+
+    # ------------------------------------------------------------------
+    # Public API
+    # ------------------------------------------------------------------
 
     def check(self, amount: float) -> bool:
-        """Return True if amount is within remaining budget."""
-        self._maybe_reset()
-        return self._state["spent"] + amount <= self.daily_limit
+        """Return True if adding *amount* would stay within the daily limit."""
+        return (self._spent_today + amount) <= self.daily_limit
+
+    def deduct(self, amount: float) -> None:
+        """Record a spend. Raises ValueError if it would exceed the limit."""
+        if not self.check(amount):
+            raise ValueError(
+                f"Budget exceeded: {amount} would bring total to "
+                f"{self._spent_today + amount} (limit {self.daily_limit})"
+            )
+        self._spent_today += amount
+        self._save_state()
+
+    def spend(self, amount: float) -> None:
+        """Record a spend (alias for deduct without check)."""
+        self._spent_today += amount
+        self._save_state()
 
     def record(self, amount: float) -> None:
-        """Record a successful spend."""
-        self._maybe_reset()
-        self._state["spent"] = round(self._state["spent"] + amount, 6)
-        self._state["count"] += 1
-        self._save()
+        """Alias for deduct."""
+        self.deduct(amount)
 
-    @property
-    def spent_today(self) -> float:
-        self._maybe_reset()
-        return self._state["spent"]
+    def reset_daily(self) -> None:
+        """Reset the daily counter."""
+        self._spent_today = 0.0
+        self._date_key = date.today().isoformat()
+        self._save_state()
+
+    # ------------------------------------------------------------------
+    # Properties
+    # ------------------------------------------------------------------
 
     @property
     def remaining(self) -> float:
-        self._maybe_reset()
-        return max(0.0, self.daily_limit - self._state["spent"])
-
-    def reset_daily(self) -> None:
-        """Force a budget reset (for testing or manual override)."""
-        self._state["spent"] = 0.0
-        self._state["count"] = 0
-        self._state["reset_at"] = self._next_midnight_utc()
-        self._save()
+        """Remaining budget for today."""
+        return max(0.0, self.daily_limit - self._spent_today)
 
     @property
-    def last_reset(self) -> float:
-        return self._state["reset_at"]
+    def spent_today(self) -> float:
+        return self._spent_today
 
-    def _maybe_reset(self) -> None:
-        if time.time() >= self._state["reset_at"]:
-            self._state["spent"] = 0.0
-            self._state["count"] = 0
-            self._state["reset_at"] = self._next_midnight_utc()
-            self._save()
+    # ------------------------------------------------------------------
+    # Persistence helpers
+    # ------------------------------------------------------------------
 
-    def _next_midnight_utc(self) -> float:
-        now = datetime.now(timezone.utc)
-        tomorrow = now.replace(hour=0, minute=0, second=0, microsecond=0)
-        from datetime import timedelta
-        return (tomorrow + timedelta(days=1)).timestamp()
+    def _load_state(self) -> None:
+        if self.storage_path is None:
+            return
+        try:
+            with open(self.storage_path, "r") as f:
+                state = json.load(f)
+            stored_date = state.get("date_key", "")
+            if stored_date == self._date_key:
+                self._spent_today = float(state.get("spent_today", 0.0))
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
 
-    def _load(self) -> dict:
-        if self._storage.exists():
-            try:
-                with open(self._storage) as f:
-                    return json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass
-        return {"spent": 0.0, "count": 0, "reset_at": self._next_midnight_utc()}
-
-    def _save(self) -> None:
-        with open(self._storage, "w") as f:
-            json.dump(self._state, f, indent=2)
+    def _save_state(self) -> None:
+        if self.storage_path is None:
+            return
+        os.makedirs(os.path.dirname(os.path.abspath(self.storage_path)), exist_ok=True)
+        with open(self.storage_path, "w") as f:
+            json.dump(
+                {"date_key": self._date_key, "spent_today": self._spent_today}, f
+            )

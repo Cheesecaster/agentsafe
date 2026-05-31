@@ -1,134 +1,218 @@
-"""Tests for agentsafe core safety guards."""
+"""Unit tests for agentsafe guard modules."""
 
-import os
-import tempfile
-import time
-from pathlib import Path
-
-from agentsafe import (
-    SafeAgent, BudgetGuard, TrustRegistry,
-    AnomalyGuard, TimeLock, BehaviorHash, KillSwitch, AuditChain,
-)
-
-
-def test_budget_guard_daily_reset():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        guard = BudgetGuard(daily_limit=0.50, storage_path=os.path.join(tmpdir, "budget.json"))
-        assert guard.check(0.30)
-        guard.record(0.30)
-        assert guard.remaining == 0.20
-        assert not guard.check(0.25)
-        guard.record(0.20)
-        assert abs(guard.spent_today - 0.50) < 0.001
+import pytest
+from agentsafe.guard.budget import BudgetGuard
+from agentsafe.guard.trust import TrustGuard
+from agentsafe.guard.anomaly import AnomalyGuard
+from agentsafe.guard.kill_switch import KillSwitch
+from agentsafe.guard.timelock import TimeLock
+from agentsafe.guard.merkle import MerkleTree
+from agentsafe.guard.audit_chain import AuditChain
+from agentsafe.guard.behavior import BehaviorHash
+from agentsafe.guard.proof import SafetyProofGenerator
+from agentsafe.safe_agent import SafeAgent, ApprovalResult
 
 
-def test_trust_registry_auto_promote():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        reg = TrustRegistry(
-            allowlist=["trusted-1"], blocklist=["bad-actor"],
-            storage_path=os.path.join(tmpdir, "trust.json")
-        )
-        assert reg.check("trusted-1") == "TRUSTED"
-        assert reg.check("bad-actor") == "BLOCKED"
-        assert reg.check("new-guy") == "UNKNOWN"
+# ---- BudgetGuard ----
 
-        for _ in range(5):
-            reg.add_interaction("new-guy", success=True)
-        assert reg.check("new-guy") == "TRUSTED"
+class TestBudgetGuard:
+    def test_approve_under_limit(self):
+        guard = BudgetGuard(daily_limit=20.0)
+        assert guard.check(5.0) is True
 
+    def test_deny_over_limit(self):
+        guard = BudgetGuard(daily_limit=10.0)
+        guard.deduct(8.0)
+        assert guard.check(3.0) is False
 
-def test_anomaly_guard_tracking():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        guard = AnomalyGuard(multiplier=3.0, storage_path=os.path.join(tmpdir, "anomaly.json"))
-        now = time.time()
-        guard.record(now, 0.05)
-        guard.record(now, 0.05)
-        avg = guard.hourly_average(time.gmtime(now).tm_hour)
-        assert avg > 0
-        assert guard.count_last_hour() == 2
+    def test_deduct_exact_limit(self):
+        guard = BudgetGuard(daily_limit=10.0)
+        guard.deduct(5.0)
+        guard.deduct(5.0)
+        assert guard.remaining == 0.0
 
+    def test_deduct_raises_over_limit(self):
+        guard = BudgetGuard(daily_limit=10.0)
+        guard.deduct(7.0)
+        with pytest.raises(ValueError):
+            guard.deduct(4.0)
 
-def test_time_lock_quiet_hours():
-    tl = TimeLock(quiet_hours=(1, 6), max_amount=0.10)
-    assert tl.is_quiet_hours(3)
-    assert not tl.is_quiet_hours(14)
-    assert tl.check(0.10, 3)
-    assert not tl.check(0.15, 3)
-    assert tl.check(100.0, 14)
+    def test_reset_daily(self):
+        guard = BudgetGuard(daily_limit=10.0)
+        guard.deduct(8.0)
+        guard.reset_daily()
+        assert guard.check(10.0) is True
+        assert guard.remaining == 10.0
 
 
-def test_behavior_hash_detection():
-    h = BehaviorHash(registered_hash=BehaviorHash.compute(
-        model="gpt-4", system_prompt="you are helpful", tools=["read", "write"]
-    ))
-    assert h.matches_current(
-        model="gpt-4", system_prompt="you are helpful", tools=["read", "write"]
-    )
-    assert not h.matches_current(
-        model="gpt-4", system_prompt="you are EVIL", tools=["read", "write"]
-    )
+# ---- TrustGuard ----
+
+class TestTrustGuard:
+    def test_allowlist_check(self):
+        tg = TrustGuard(initial_allowlist=["0xabc", "0xdef"])
+        assert tg.check("0xabc") is True
+        assert tg.check("0x123") is False
+
+    def test_empty_allowlist_allows_all(self):
+        tg = TrustGuard()
+        assert tg.check("0xany") is True
+
+    def test_deny_overrides_allow(self):
+        tg = TrustGuard(initial_allowlist=["0xabc"])
+        tg.deny("0xabc")
+        assert tg.check("0xabc") is False
+
+    def test_add_to_allowlist(self):
+        tg = TrustGuard()
+        tg.add_to_allowlist("0xnew")
+        assert tg.check("0xnew") is True
 
 
-def test_kill_switch_escalation():
-    ks = KillSwitch()
-    assert not ks.is_active
-    ks.activate("suspicious activity")
-    assert ks.is_active
-    assert ks.reason == "suspicious activity"
-    ks.resume()
-    assert not ks.is_active
+# ---- AnomalyGuard ----
+
+class TestAnomalyGuard:
+    def test_no_data_allows(self):
+        ag = AnomalyGuard()
+        assert ag.check(100.0) is True
+
+    def test_with_data(self):
+        ag = AnomalyGuard()
+        ag.record(1.0, 10.0)
+        ag.record(2.0, 12.0)
+        ag.record(3.0, 11.0)
+        avg = ag.get_avg()
+        assert 10.0 <= avg <= 12.0
+        # 30 * avg should allow normal amounts
+        assert ag.check(15.0) is True
 
 
-def test_audit_chain_integrity():
-    with tempfile.NamedTemporaryFile(suffix=".jsonl", delete=False) as f:
-        chain = AuditChain(f.name)
-        h1 = chain.log("test_action", {"key": "value"})
-        h2 = chain.log("test_action2", {"key2": "value2"})
-        assert h1 != h2
-        assert chain.verify()
-        assert chain.count == 2
-    Path(f.name).unlink(missing_ok=True)
+# ---- KillSwitch ----
+
+class TestKillSwitch:
+    def test_inactive_by_default(self):
+        ks = KillSwitch()
+        assert ks.is_active() is False
+
+    def test_activate_deactivate(self):
+        ks = KillSwitch()
+        ks.activate()
+        assert ks.is_active() is True
+        ks.deactivate()
+        assert ks.is_active() is False
 
 
-def test_safe_agent_end_to_end():
-    with tempfile.TemporaryDirectory() as tmpdir:
-        agent = SafeAgent(
-            daily_budget="1.00",
-            currency="USDC",
-            allowlist=["trusted-api.com"],
-            blocklist=["scammer.evil"],
-            quiet_hours=(26, 27),  # Impossible hours — never triggers
-            quiet_hours_max="0.05",
-            anomaly_multiplier=3.0,
-            storage_path=tmpdir,
-        )
+# ---- TimeLock ----
 
-        # Test approved spend to trusted party
-        result = agent.before_spend(to="trusted-api.com", amount=0.10, action="get_data")
-        assert result.status == "APPROVED"
-        agent.record_spent(0.10, "trusted-api.com")
+class TestTimeLock:
+    def test_outside_quiet_hours(self):
+        tl = TimeLock(max_amount=20.0, quiet_hours=(1, 6))
+        # Hour 12 is outside quiet hours
+        assert tl.check(10.0, current_hour=12) is True
 
-        # Test denied spend to blocked party
-        result = agent.before_spend(to="scammer.evil", amount=0.01)
-        assert result.status == "DENIED"
-        assert "blocked" in result.reason.lower()
+    def test_during_quiet_hours(self):
+        tl = TimeLock(max_amount=20.0, quiet_hours=(1, 6))
+        # Hour 3 is inside quiet hours
+        assert tl.check(5.0, current_hour=3) is False
 
-        # Test unknown counterparty escalation
-        result = agent.before_spend(to="unknown-new.io", amount=0.50)
-        assert result.status == "ESCALATE"
-        assert "Unknown counterparty" in result.reason
+    def test_disabled_by_invalid_hours(self):
+        tl = TimeLock(max_amount=20.0, quiet_hours=(26, 27))
+        # Hours 26-27 are never valid, so never in quiet hours
+        assert tl.check(10.0, current_hour=12) is True
 
-        # Test status
-        status = agent.status()
-        assert status["spent_today"] == "0.1000 USDC"
-        assert status["kill_switch"] == False
+    def test_max_amount_enforced(self):
+        tl = TimeLock(max_amount=10.0, quiet_hours=(1, 6))
+        # Hour 12 is outside quiet hours, but amount > max_amount
+        assert tl.check(15.0, current_hour=12) is False
 
-        # Test kill switch
-        agent.kill_switch.activate("emergency")
-        result = agent.before_spend(to="trusted-api.com", amount=0.05)
-        assert result.status == "DENIED"
-        assert "Kill switch" in result.reason
 
-        # Verify audit
-        assert agent.audit.verify()
+# ---- MerkleTree ----
 
+class TestMerkleTree:
+    def test_empty_tree(self):
+        mt = MerkleTree()
+        root = mt.get_root()
+        assert isinstance(root, str)
+        assert len(root) == 64  # SHA-256 hex
+
+    def test_append_and_root(self):
+        mt = MerkleTree()
+        mt.append("data1")
+        mt.append("data2")
+        root = mt.get_root()
+        assert root == MerkleTree.get_root_of(["data1", "data2"])
+
+    def test_different_data_different_root(self):
+        mt1 = MerkleTree()
+        mt1.append("a")
+        mt2 = MerkleTree()
+        mt2.append("b")
+        assert mt1.get_root() != mt2.get_root()
+
+
+# ---- AuditChain ----
+
+class TestAuditChain:
+    def test_log_entry(self):
+        ac = AuditChain()
+        ac.log("transfer", "to=0xabc amount=5.0")
+        assert len(ac) == 1
+
+    def test_merkle_root_is_property(self):
+        ac = AuditChain()
+        ac.log("transfer", "to=0xabc amount=5.0")
+        root = ac.merkle_root  # no parens — property
+        assert isinstance(root, str)
+        assert len(root) == 64
+
+    def test_get_recent_logs(self):
+        ac = AuditChain()
+        for i in range(15):
+            ac.log(f"action_{i}", f"details_{i}")
+        recent = ac.get_recent_logs(5)
+        assert len(recent) == 5
+        assert recent[0]["id"] == 11  # 1-based IDs, last 5 are 11-15
+
+    def test_merkle_root_grows(self):
+        ac = AuditChain()
+        ac.log("a", "x")
+        root1 = ac.merkle_root
+        ac.log("b", "y")
+        root2 = ac.merkle_root
+        assert root1 != root2
+
+
+# ---- BehaviorHash ----
+
+class TestBehaviorHash:
+    def test_compute_returns_hex(self):
+        fp = BehaviorHash.compute("transfer", "0xabc")
+        assert isinstance(fp, str)
+        assert len(fp) == 64
+
+    def test_deterministic(self):
+        fp1 = BehaviorHash.compute("transfer", "0xabc")
+        fp2 = BehaviorHash.compute("transfer", "0xabc")
+        assert fp1 == fp2
+
+    def test_different_inputs(self):
+        fp1 = BehaviorHash.compute("transfer", "0xabc")
+        fp2 = BehaviorHash.compute("transfer", "0xdef")
+        assert fp1 != fp2
+
+
+# ---- SafetyProofGenerator ----
+
+class TestSafetyProof:
+    def test_generate_returns_dict(self):
+        pg = SafetyProofGenerator()
+        result = pg.generate("s1", "deadbeef", {"budget": True, "trust": True})
+        assert isinstance(result, dict)
+        assert "signature" in result
+        assert result["session_id"] == "s1"
+        assert result["merkle_root"] == "deadbeef"
+
+    def test_deterministic_signature(self):
+        pg = SafetyProofGenerator(secret="test")
+        r1 = pg.generate("sid", "root", {"a": True})
+        r2 = pg.generate("sid", "root", {"a": True})
+        assert r1["signature"] == r2["signature"]

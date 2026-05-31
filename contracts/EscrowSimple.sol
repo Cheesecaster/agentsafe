@@ -1,115 +1,163 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 
 /**
  * @title EscrowSimple
- * @notice Lightweight escrow for x402 agent-to-agent settlements on Base.
- * @dev Storage-packed (2 slots). Seller can claim after timeout if buyer inactive.
- *      Optimistic settlement: buyer approves, seller claims on timeout fallback.
+ * @notice Simple escrow for agent-mediated payments with timeout-based claims.
+ *         USDC is used as the settlement token.
  */
-contract EscrowSimple is Ownable, ReentrancyGuard {
+contract EscrowSimple is ReentrancyGuard {
+    using SafeERC20 for IERC20;
 
+    /// @notice USDC on Base (6 decimals)
+    IERC20 public constant USDC = IERC20(0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913);
+
+    /// @notice An escrow agreement between buyer and seller
     struct Escrow {
-        uint128 amount;
-        address buyer;
-        address seller;
-        uint32 active;        // 1 = active, 0 = resolved
-        uint40 releaseTime;   // Auto-refund/claim deadline
+        bytes32 sessionId;    // Associated session (0 if none)
+        address seller;       // Seller who receives funds
+        address buyer;        // Buyer who deposited funds
+        uint128 amount;       // Escrowed amount in USDC (6 decimals)
+        uint48  timeout;      // Unix timestamp after which seller can claim
+        uint48  createdAt;    // Creation timestamp
+        bool    claimed;      // Whether the escrow is resolved
+        bool    refunded;     // Whether funds were refunded
     }
 
-    mapping(bytes32 => Escrow) public escrows;
+    /// @notice Escrow ID -> Escrow data
+    mapping(uint256 => Escrow) public escrows;
 
-    IERC20 public immutable USDC;
+    /// @notice Next escrow ID
+    uint256 private _nextId;
 
-    event EscrowCreated(bytes32 id, address buyer, address seller, uint128 amount, uint40 releaseTime);
-    event FundsReleased(bytes32 id, address seller, uint128 amount);
-    event FundsRefunded(bytes32 id, address buyer, uint128 amount);
-    event SellerClaimed(bytes32 id, address seller, uint128 amount);
-
-    constructor(address _usdc) Ownable(msg.sender) {
-        require(_usdc != address(0), "Invalid USDC");
-        USDC = IERC20(_usdc);
-    }
+    event EscrowCreated(uint256 escrowId, bytes32 sessionId, address seller, address buyer, uint128 amount, uint48 timeout);
+    event EscrowReleased(uint256 escrowId, address to, uint128 amount);
+    event EscrowRefunded(uint256 escrowId, address to, uint128 amount);
+    event EscrowClaimed(uint256 escrowId, address seller, uint128 amount);
 
     /**
-     * @notice Create escrow: buyer locks USDC.
-     * @param id Hash of order (buyer:service:amount).
-     * @param seller Service provider.
-     * @param durationSeconds Timeout before auto-resolution.
+     * @notice Create a new escrow. Buyer must call this.
+     * @param seller Address of the seller
+     * @param amount Amount in USDC (6 decimals) to escrow
+     * @param timeoutSeconds Seconds until seller can auto-claim
+     * @return escrowId The new escrow identifier
      */
-    function createEscrow(bytes32 id, address seller, uint128 amount, uint32 durationSeconds) external nonReentrant {
-        require(amount > 0, "Amount must be > 0");
-        require(seller != address(0), "Invalid seller");
-        require(escrows[id].active == 0, "ID already used");
+    function create(
+        address seller,
+        uint128 amount,
+        uint48 timeoutSeconds
+    ) external returns (uint256 escrowId) {
+        require(seller != address(0), "Escrow: invalid seller");
+        require(seller != msg.sender, "Escrow: buyer != seller");
+        require(amount > 0, "Escrow: amount must be > 0");
+        require(timeoutSeconds > 0, "Escrow: timeout must be > 0");
 
-        // Lock USDC from buyer
-        SafeERC20.safeTransferFrom(USDC, msg.sender, address(this), amount);
+        _nextId++;
+        escrowId = _nextId;
 
-        uint40 rTime = uint40(block.timestamp) + durationSeconds;
-        escrows[id] = Escrow({
-            amount: amount,
-            buyer: msg.sender,
+        // Pull USDC from buyer into this contract
+        USDC.safeTransferFrom(msg.sender, address(this), amount);
+
+        escrows[escrowId] = Escrow({
+            sessionId: 0,
             seller: seller,
-            active: 1,
-            releaseTime: rTime
+            buyer: msg.sender,
+            amount: amount,
+            timeout: uint48(block.timestamp) + timeoutSeconds,
+            createdAt: uint48(block.timestamp),
+            claimed: false,
+            refunded: false
         });
 
-        emit EscrowCreated(id, msg.sender, seller, amount, rTime);
+        emit EscrowCreated(escrowId, 0, seller, msg.sender, amount, timeoutSeconds);
     }
 
     /**
-     * @notice Buyer confirms service delivered -> release to seller.
+     * @notice Create an escrow linked to a SessionGuard session.
      */
-    function release(bytes32 id) external nonReentrant {
-        Escrow storage e = escrows[id];
-        require(e.active == 1, "Not active");
-        require(msg.sender == e.buyer, "Only buyer");
+    function createForSession(
+        bytes32 sessionId,
+        address seller,
+        uint128 amount,
+        uint48 timeoutSeconds
+    ) external returns (uint256 escrowId) {
+        require(seller != address(0), "Escrow: invalid seller");
+        require(seller != msg.sender, "Escrow: buyer != seller");
+        require(amount > 0, "Escrow: amount must be > 0");
+        require(timeoutSeconds > 0, "Escrow: timeout must be > 0");
 
-        _resolve(id, e.seller, e.amount);
-        emit FundsReleased(id, e.seller, e.amount);
+        _nextId++;
+        escrowId = _nextId;
+
+        USDC.safeTransferFrom(msg.sender, address(this), amount);
+
+        escrows[escrowId] = Escrow({
+            sessionId: sessionId,
+            seller: seller,
+            buyer: msg.sender,
+            amount: amount,
+            timeout: uint48(block.timestamp) + timeoutSeconds,
+            createdAt: uint48(block.timestamp),
+            claimed: false,
+            refunded: false
+        });
+
+        emit EscrowCreated(escrowId, sessionId, seller, msg.sender, amount, timeoutSeconds);
     }
 
     /**
-     * @notice Buyer refunds self after timeout expires without resolution.
+     * @notice Release escrowed funds to the seller. Can be called by anyone
+     *         (typically the buyer confirming work is done).
+     * @param escrowId The escrow identifier
      */
-    function refund(bytes32 id) external nonReentrant {
-        Escrow storage e = escrows[id];
-        require(e.active == 1, "Not active");
-        require(msg.sender == e.buyer || msg.sender == owner(), "Not authorized");
-        require(uint40(block.timestamp) > e.releaseTime, "Timeout not reached");
+    function release(uint256 escrowId) external nonReentrant {
+        Escrow storage e = escrows[escrowId];
+        require(e.amount > 0, "Escrow: escrow does not exist");
+        require(!e.claimed, "Escrow: already resolved");
+        require(!e.refunded, "Escrow: already refunded");
 
-        _resolve(id, e.buyer, e.amount);
-        emit FundsRefunded(id, e.buyer, e.amount);
+        e.claimed = true;
+        USDC.safeTransfer(e.seller, e.amount);
+
+        emit EscrowReleased(escrowId, e.seller, e.amount);
     }
 
     /**
-     * @notice Seller auto-claims after timeout — fallback if buyer disappears.
-     * Requires 2x timeout duration (more conservative, protects buyer).
-     * This ensures buyer has double the time to raise a dispute.
+     * @notice Refund escrowed funds back to the buyer. Only buyer can call.
+     * @param escrowId  The escrow identifier
      */
-    function claim(bytes32 id) external nonReentrant {
-        Escrow storage e = escrows[id];
-        require(e.active == 1, "Not active");
-        require(msg.sender == e.seller, "Only seller");
+    function refund(uint256 escrowId) external nonReentrant {
+        Escrow storage e = escrows[escrowId];
+        require(e.amount > 0, "Escrow: escrow does not exist");
+        require(!e.claimed, "Escrow: already resolved");
+        require(!e.refunded, "Escrow: already refunded");
+        require(msg.sender == e.buyer, "Escrow: only buyer can refund");
 
-        uint40 claimTime = e.releaseTime + (e.releaseTime - uint40(block.timestamp));
-        require(uint40(block.timestamp) >= claimTime, "Seller claim window not active");
+        e.refunded = true;
+        USDC.safeTransfer(e.buyer, e.amount);
 
-        _resolve(id, e.seller, e.amount);
-        emit SellerClaimed(id, e.seller, e.amount);
+        emit EscrowRefunded(escrowId, e.buyer, e.amount);
     }
 
-    function _resolve(bytes32 id, address to, uint128 amount) internal {
-        Escrow storage e = escrows[id];
-        e.active = 0;
-        SafeERC20.safeTransfer(USDC, to, amount);
-    }
+    /**
+     * @notice Seller auto-claims after timeout expires.
+     * @param escrowId The escrow identifier
+     */
+    function claim(uint256 escrowId) external nonReentrant {
+        Escrow storage e = escrows[escrowId];
+        require(e.amount > 0, "Escrow: escrow does not exist");
+        require(!e.claimed, "Escrow: already resolved");
+        require(!e.refunded, "Escrow: already refunded");
+        require(msg.sender == e.seller, "Escrow: only seller can claim");
+        require(uint48(block.timestamp) >= e.timeout, "Escrow: timeout not reached");
 
-    function getEscrow(bytes32 id) external view returns (Escrow memory) {
-        return escrows[id];
+        e.claimed = true;
+        USDC.safeTransfer(e.seller, e.amount);
+
+        emit EscrowClaimed(escrowId, e.seller, e.amount);
     }
 }

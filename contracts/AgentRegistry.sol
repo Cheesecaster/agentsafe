@@ -1,108 +1,154 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-
 /**
  * @title AgentRegistry
- * @notice DID-style identity registry for verified autonomous agents on Base.
- * @dev Allows agents to register a name, metadata, and verification badge.
- *      Used by SessionGuard/Escrow to trust or deny unknown agents.
- *      Optimized: 1 slot per agent (address key -> packed struct).
+ * @notice Registry for AI agents with trust scoring and verification.
+ *         Agents register with a name and metadata URI, receive trust scores (0-100),
+ *         and verified agents are auto-assigned the maximum score.
  */
-contract AgentRegistry is Ownable {
-
+contract AgentRegistry {
+    /// @notice Agent record
     struct Agent {
-        address wallet;
-        bytes32 nameHash;      // keccak256 of agent name
-        uint8 trustScore;      // 0-100 (100 = fully verified)
-        uint40 registeredAt;   // Timestamp of registration
-        uint40 lastUpdate;     // Last profile update
-        uint16 metadataLen;    // Length of metadata
+        string name;           // Human-readable agent name
+        string metadataURI;    // IPFS or HTTP link to agent metadata
+        uint8  trustScore;     // Trust score 0-100
+        bool   verified;       // Whether the agent is verified (auto-score=100)
+        uint48 registeredAt;   // Registration timestamp
+        address registeredBy;  // Address that registered the agent
     }
 
+    /// @notice Agent address -> Agent record
     mapping(address => Agent) public agents;
-    mapping(bytes32 => address) public nameRegistry; // nameHash -> address
 
-    string[] public metadataStore; // IPFS/Arweave refs for extended agent data
-    mapping(address => uint16) public agentMetadataIndex;
+    /// @notice All registered agent addresses (for enumeration)
+    address[] public agentList;
 
-    event AgentRegistered(address agent, bytes32 nameHash, string metadataUri);
-    event TrustUpdated(address agent, uint8 newScore);
-    event AgentVerified(address agent, address verifier);
+    /// @notice Governance/admin address
+    address public owner;
 
-    event MetadataUpdated(address agent, uint16 index);
+    event AgentRegistered(address agentAddr, string name, string metadataURI);
+    event TrustUpdated(address agentAddr, uint8 newScore, address updatedBy);
+    event AgentVerified(address agentAddr);
+    event OwnershipTransferred(address oldOwner, address newOwner);
 
-    constructor() Ownable(msg.sender) {}
+    modifier onlyOwner() {
+        require(msg.sender == owner, "AgentRegistry: caller is not owner");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
 
     /**
-     * @notice Register an agent identity.
-     * @param agent The agent's wallet address.
-     * @param name Human-readable name (stored as hash).
-     * @param metadataUri IPFS/Arweave URI for extended profile.
+     * @notice Register a new agent. Anyone can register their own agent address.
+     * @param name Human-readable name for the agent
+     * @param metadataURI URI to agent metadata
      */
-    function registerAgent(address agent, string calldata name, string calldata metadataUri) external onlyOwner {
-        require(agent != address(0), "Invalid address");
-        require(agents[agent].wallet == address(0), "Already registered");
+    function registerAgent(string calldata name, string calldata metadataURI) external {
+        require(bytes(name).length > 0, "AgentRegistry: name is empty");
+        require(agents[msg.sender].registeredAt == 0, "AgentRegistry: already registered");
 
-        bytes32 nameHash = keccak256(bytes(name));
-        require(nameRegistry[nameHash] == address(0), "Name taken");
-
-        nameRegistry[nameHash] = agent;
-        metadataStore.push(metadataUri);
-        uint16 idx = uint16(metadataStore.length - 1);
-
-        agents[agent] = Agent({
-            wallet: agent,
-            nameHash: nameHash,
-            trustScore: 10,
-            registeredAt: uint40(block.timestamp),
-            lastUpdate: uint40(block.timestamp),
-            metadataLen: idx
+        agents[msg.sender] = Agent({
+            name: name,
+            metadataURI: metadataURI,
+            trustScore: 0,
+            verified: false,
+            registeredAt: uint48(block.timestamp),
+            registeredBy: msg.sender
         });
 
-        emit AgentRegistered(agent, nameHash, metadataUri);
+        agentList.push(msg.sender);
+
+        emit AgentRegistered(msg.sender, name, metadataURI);
     }
 
-    function updateTrust(address agent, uint8 newScore) external onlyOwner {
-        require(newScore <= 100, "Score out of range");
-        require(agents[agent].wallet != address(0), "Not registered");
+    /**
+     * @notice Update the trust score for an agent. Caller must be owner or the agent itself.
+     * @param agentAddr Address of the agent
+     * @param score New trust score (0-100)
+     */
+    function updateTrust(address agentAddr, uint8 score) external {
+        require(agents[agentAddr].registeredAt > 0, "AgentRegistry: agent not registered");
+        require(msg.sender == owner || msg.sender == agentAddr,
+                "AgentRegistry: unauthorized trust update");
+        require(!agents[agentAddr].verified || msg.sender == owner,
+                "AgentRegistry: cannot lower verified agent trust");
 
-        agents[agent].trustScore = newScore;
-        agents[agent].lastUpdate = uint40(block.timestamp);
-        emit TrustUpdated(agent, newScore);
+        agents[agentAddr].trustScore = score;
+
+        emit TrustUpdated(agentAddr, score, msg.sender);
     }
 
-    function verifyAgent(address agent) external onlyOwner {
-        require(agents[agent].wallet != address(0), "Not registered");
-        require(agents[agent].trustScore < 100, "Already verified");
+    /**
+     * @notice Verify an agent — auto-assigns maximum trust score (100). Owner only.
+     * @param agentAddr Address of the agent to verify
+     */
+    function verifyAgent(address agentAddr) external onlyOwner {
+        require(agents[agentAddr].registeredAt > 0, "AgentRegistry: agent not registered");
 
-        agents[agent].trustScore = 100;
-        agents[agent].lastUpdate = uint40(block.timestamp);
-        emit AgentVerified(agent, msg.sender);
+        Agent storage agent = agents[agentAddr];
+        agent.verified = true;
+        agent.trustScore = 100;
+
+        emit AgentVerified(agentAddr);
     }
 
-    function getAgent(address agent) external view returns (
-        bytes32 nameHash,
-        uint8 trustScore,
-        uint40 registeredAt,
-        uint40 lastUpdate
-    ) {
-        Agent storage a = agents[agent];
-        return (a.nameHash, a.trustScore, a.registeredAt, a.lastUpdate);
+    /**
+     * @notice Check if an agent meets the minimum trust threshold.
+     * @param addr Agent address to check
+     * @param minScore Minimum trust score required
+     * @return True if the agent is registered and meets or exceeds the minimum score
+     */
+    function isTrusted(address addr, uint8 minScore) external view returns (bool) {
+        Agent storage agent = agents[addr];
+        if (agent.registeredAt == 0) return false;
+        return agent.trustScore >= minScore;
     }
 
-    function isTrusted(address agent, uint8 minScore) external view returns (bool) {
-        Agent storage a = agents[agent];
-        return a.wallet != address(0) && a.trustScore >= minScore;
+    /**
+     * @notice Get full agent details.
+     * @param addr Agent address
+     */
+    function getAgent(address addr)
+        external
+        view
+        returns (
+            string memory name,
+            string memory metadataURI,
+            uint8 trustScore,
+            bool verified,
+            uint48 registeredAt,
+            address registeredBy
+        )
+    {
+        Agent storage agent = agents[addr];
+        require(agent.registeredAt > 0, "AgentRegistry: agent not registered");
+
+        return (
+            agent.name,
+            agent.metadataURI,
+            agent.trustScore,
+            agent.verified,
+            agent.registeredAt,
+            agent.registeredBy
+        );
     }
 
-    function resolveName(bytes32 nameHash) external view returns (address) {
-        return nameRegistry[nameHash];
+    /**
+     * @notice Return total number of registered agents.
+     */
+    function getAgentCount() external view returns (uint256) {
+        return agentList.length;
     }
 
-    function getMetadata(uint16 index) external view returns (string memory) {
-        require(index < metadataStore.length, "Index out of bounds");
-        return metadataStore[index];
+    /**
+     * @notice Transfer ownership to a new address.
+     */
+    function transferOwnership(address newOwner) external onlyOwner {
+        require(newOwner != address(0), "AgentRegistry: new owner is zero address");
+        emit OwnershipTransferred(owner, newOwner);
+        owner = newOwner;
     }
 }

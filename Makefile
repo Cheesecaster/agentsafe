@@ -1,34 +1,15 @@
-.PHONY: test build deploy deploy-local install clean
+.PHONY: test install install-dev clean
 
-# Default: run all tests
 test:
-	pip install -e ".[dev]" && pytest tests/ -v
+	python -m pytest tests/ -v --tb=short
 
-# E2E test — full flow simulation
-test-e2e:
-	pip install -e ".[dev,mcp]" && pytest tests/test_e2e.py -v
-
-# Install all deps
 install:
-	pip install -e ".[dev,mcp,cli,api,x402]"
+	pip install -e ".[dev,mcp,api]"
 
-# Build Rust core
-build:
-	cd crates/agentsafe-core && cargo build --release
+install-dev:
+	pip install -e ".[dev]"
 
-# Deploy to Base Mainnet
-deploy:
-	pip install -e ".[dev]" && python scripts/deploy.py base
-
-# Deploy to local Anvil (for testing)
-deploy-local:
-	pip install -e ".[dev]" && python scripts/deploy.py local
-
-# Start MCP server
-mcp:
-	pip install -e ".[mcp]" && python -m agentsafe.mcp.server
-
-# Clean build artifacts
 clean:
-	rm -rf build/ dist/ *.egg-info/
-	cd crates/agentsafe-core && cargo clean
+	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true
+	find . -type f -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
+	rm -rf .pytest_cache build dist *.egg-info

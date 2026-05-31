@@ -1,433 +1,212 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>agentsafe — Web3 Login</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  :root {
-    --blue: #0052FF;
-    --blue-light: #4B8BFF;
-    --blue-dark: #0040CC;
-    --bg: #F5F7FA;
-    --card: #FFFFFF;
-    --text: #14161B;
-    --gray: #8A919E;
-    --border: #E3E6EA;
-    --success: #00C48C;
-    --danger: #FF4D4D;
-  }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
-    background: var(--bg);
-    color: var(--text);
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-  }
-
-  /* Header */
-  header {
-    background: var(--card);
-    border-bottom: 1px solid var(--border);
-    padding: 16px 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-  }
-  .logo {
-    display: flex; align-items: center; gap: 10px;
-    font-weight: 700; font-size: 20px; color: var(--blue);
-    text-decoration: none;
-  }
-  .logo svg { flex-shrink: 0; }
-  .wallet-pill {
-    display: none; align-items: center; gap: 8px;
-    background: var(--bg); border: 1px solid var(--border);
-    border-radius: 100px; padding: 8px 16px;
-    font-family: 'SF Mono', 'Fira Code', monospace;
-    font-size: 13px; color: var(--text);
-  }
-  .wallet-pill.active { display: flex; }
-  .wallet-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--success); }
-  .wallet-pill.error .wallet-dot { background: var(--danger); }
-
-  /* Main */
-  main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 40px 20px;
-  }
-
-  /* Login Card */
-  .login-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 16px;
-    padding: 48px 40px;
-    max-width: 420px;
-    width: 100%;
-    text-align: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-  }
-  .login-card h1 {
-    font-size: 24px;
-    font-weight: 700;
-    margin-bottom: 8px;
-  }
-  .login-card p {
-    color: var(--gray);
-    font-size: 15px;
-    line-height: 1.5;
-    margin-bottom: 32px;
-  }
-  .btn-connect {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    width: 100%;
-    padding: 14px 24px;
-    background: var(--blue);
-    color: #fff;
-    border: none;
-    border-radius: 12px;
-    font-size: 16px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
-  }
-  .btn-connect:hover { background: var(--blue-dark); }
-  .btn-connect:active { transform: scale(0.98); }
-  .btn-connect:disabled {
-    background: var(--gray);
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-  .btn-connect svg { flex-shrink: 0; }
-
-  .status-text {
-    margin-top: 16px;
-    font-size: 13px;
-    color: var(--gray);
-    min-height: 20px;
-  }
-  .status-text.error { color: var(--danger); }
-  .status-text.success { color: var(--success); }
-
-  /* Dashboard (hidden until authenticated) */
-  .dashboard {
-    display: none;
-    max-width: 800px;
-    width: 100%;
-  }
-  .dashboard.active { display: block; }
-
-  .grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .stat-card {
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    padding: 24px;
-  }
-  .stat-card .label {
-    font-size: 12px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--gray);
-    margin-bottom: 8px;
-  }
-  .stat-card .value {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--text);
-  }
-  .stat-card .value.blue { color: var(--blue); }
-  .stat-card .value.success { color: var(--success); }
-
-  .actions {
-    display: flex; gap: 12px; flex-wrap: wrap;
-  }
-  .btn {
-    padding: 12px 20px;
-    border-radius: 10px;
-    font-size: 14px;
-    font-weight: 600;
-    cursor: pointer;
-    border: 1px solid var(--border);
-    background: var(--card);
-    color: var(--text);
-    transition: all 0.15s;
-  }
-  .btn:hover { border-color: var(--blue); color: var(--blue); }
-  .btn.danger { border-color: var(--danger); color: var(--danger); }
-  .btn.danger:hover { background: var(--danger); color: #fff; }
-  .btn.primary { background: var(--blue); color: #fff; border-color: var(--blue); }
-  .btn.primary:hover { background: var(--blue-dark); }
-
-  .no-wallet-msg {
-    margin-top: 20px;
-    padding: 16px;
-    background: #FFF3E0;
-    border: 1px solid #FFB74D;
-    border-radius: 10px;
-    font-size: 14px;
-    color: #E65100;
-    text-align: center;
-    display: none;
-  }
-
-  /* Spinner */
-  .spinner {
-    display: inline-block;
-    width: 18px; height: 18px;
-    border: 2px solid rgba(255,255,255,0.3);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin 0.6s linear infinite;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>agentsafe — Agent Wallet Dashboard</title>
+    <style>
+        :root {
+            --blue: #0052FF;
+            --white: #FFFFFF;
+            --gray-50: #F9FAFB;
+            --gray-100: #F3F4F6;
+            --gray-200: #E5E7EB;
+            --gray-800: #1F2937;
+            --red: #DC2626;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-800);
+            min-height: 100vh;
+        }
+        .container { max-width: 720px; margin: 0 auto; padding: 2rem 1rem; }
+        h1 { font-size: 1.5rem; margin-bottom: 1.5rem; color: var(--blue); }
+        .card {
+            background: var(--white);
+            border: 1px solid var(--gray-200);
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1rem;
+        }
+        .card h2 { font-size: 0.875rem; color: #6B7280; margin-bottom: 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .card .value { font-size: 1.5rem; font-weight: 700; }
+        .value.big { font-size: 2rem; }
+        #wallet-section { margin-bottom: 2rem; }
+        button {
+            background: var(--blue);
+            color: var(--white);
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 600;
+            cursor: pointer;
+            font-size: 0.875rem;
+            transition: opacity 0.2s;
+        }
+        button:hover { opacity: 0.9; }
+        button.danger { background: var(--red); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .status { display: inline-block; padding: 0.25rem 0.75rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .status.active { background: #D1FAE5; color: #065F46; }
+        .status.inactive { background: #FEE2E2; color: #991B1B; }
+        #kill-btn { margin-top: 1rem; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        @media (max-width: 600px) { .grid { grid-template-columns: 1fr; } }
+        .mono { font-family: ui-monospace, 'Cascadia Code', monospace; font-size: 0.8rem; word-break: break-all; }
+    </style>
 </head>
 <body>
+    <div class="container">
+        <h1>agentsafe Dashboard</h1>
 
-<header>
-  <a href="#" class="logo">
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
-      <path d="M14 2L4 8v12l10 6 10-6V8L14 2z" stroke="#0052FF" stroke-width="2" fill="none"/>
-      <path d="M9 14l3 3 7-7" stroke="#0052FF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="19" cy="17" r="2" fill="#4B8BFF"/>
-      <circle cx="9" cy="10" r="1.5" fill="#4B8BFF"/>
-    </svg>
-    agentsafe
-  </a>
-  <div class="wallet-pill" id="walletPill">
-    <span class="wallet-dot"></span>
-    <span id="walletShort"></span>
-  </div>
-</header>
+        <div id="wallet-section" class="card">
+            <h2>Authentication</h2>
 
-<main>
-  <!-- Login Screen -->
-  <div class="login-card" id="loginCard">
-    <h1>Connect Wallet</h1>
-    <p>Sign in with your Ethereum wallet on Base.<br>No email, no password — just your wallet.</p>
-    <button class="btn-connect" id="btnConnect" onclick="handleConnect()">
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <rect x="2" y="5" width="16" height="12" rx="2" stroke="#fff" stroke-width="1.5"/>
-        <path d="M2 9h16" stroke="#fff" stroke-width="1.5"/>
-        <circle cx="6" cy="7" r="0.8" fill="#fff"/>
-      </svg>
-      Connect Wallet
-    </button>
-    <div class="status-text" id="statusText"></div>
-    <div class="no-wallet-msg" id="noWalletMsg">
-      ⚠️ No wallet detected. Install <a href="https://metamask.io" target="_blank">MetaMask</a> or a Web3 wallet to continue.
-    </div>
-  </div>
+            <!-- API Key login (primary for daily use) -->
+            <div style="margin-bottom: 1rem;">
+                <p style="font-size: 0.8rem; color: #6B7280; margin-bottom: 0.5rem;">Enter your agentsafe API key (no wallet needed)</p>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input id="api-key-input" type="password" placeholder="ask_..." style="flex:1; padding: 0.5rem 0.75rem; border: 1px solid var(--gray-200); border-radius: 8px; font-family: ui-monospace, monospace; font-size: 0.85rem;">
+                    <button onclick="loginApiKey()">Login</button>
+                </div>
+            </div>
 
-  <!-- Dashboard (shown after auth) -->
-  <div class="dashboard" id="dashboard">
-    <div class="grid">
-      <div class="stat-card">
-        <div class="label">USDC Balance</div>
-        <div class="value blue" id="statBalance">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Daily Budget</div>
-        <div class="value" id="statBudget">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Spent Today</div>
-        <div class="value" id="statSpent">—</div>
-      </div>
-      <div class="stat-card">
-        <div class="label">Status</div>
-        <div class="value success" id="statStatus">—</div>
-      </div>
+            <!-- Wallet login (one-time setup) -->
+            <div style="border-top: 1px solid var(--gray-200); padding-top: 1rem;">
+                <p style="font-size: 0.8rem; color: #6B7280; margin-bottom: 0.5rem;">Or connect wallet (SiWE)</p>
+                <button id="connect-btn" onclick="connectWallet()" style="background: var(--gray-100); color: var(--gray-800);">Connect Wallet</button>
+            </div>
+
+            <div id="wallet-info" style="margin-top: 1rem; display: none;">
+                <p class="mono" id="wallet-addr"></p>
+                <p>USDC: <span id="usdc-balance" class="value">—</span> USDC</p>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Budget Remaining</h2>
+                <div id="budget-val" class="value big">$20.00</div>
+                <div style="margin-top: 0.5rem;">
+                    <span id="session-status" class="status inactive">INACTIVE</span>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Merkle Root</h2>
+                <div id="merkle-root" class="mono">—</div>
+                <div id="session-id" class="mono" style="margin-top: 4px; font-size: 0.75rem; color: #6B7280;"></div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Audit Log</h2>
+            <pre id="audit-log" class="mono" style="max-height: 200px; overflow-y: auto; font-size: 0.75rem;">Waiting for session...</pre>
+        </div>
+
+        <button id="kill-btn" class="danger" onclick="killSwitch()" disabled>🛑 Kill Switch</button>
     </div>
 
-    <div class="actions">
-      <button class="btn" onclick="refreshStatus()">🔄 Refresh</button>
-      <button class="btn danger" onclick="handleKill()">🛑 Kill Switch</button>
-      <button class="btn" onclick="handleDisconnect()">Disconnect</button>
-    </div>
-  </div>
-</main>
+    <script>
+        const USDC_ABI = [
+            { "inputs": [{"name": "account", "type": "address"}], "name": "balanceOf", "outputs": [{"type": "uint256"}], "stateMutability": "view", "type": "function" }
+        ];
+        const USDC_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913";
+        const API_BASE = window.location.origin;
+        let account = null;
 
-<script>
-  const API_BASE = window.location.origin;
-  let currentToken = null;
-  let currentWallet = null;
+        async function loginApiKey() {
+            const key = document.getElementById('api-key-input').value.trim();
+            if (!key) { alert("Enter an API key"); return; }
+            localStorage.setItem('agentsafe_api_key', key);
+            loadStatus();
+        }
 
-  // ── Wallet Detection ──
-  function detectWallet() {
-    return typeof window.ethereum !== 'undefined';
-  }
+        async function connectWallet() {
+            if (!window.ethereum) {
+                alert("No wallet detected. Install MetaMask or Coinbase Wallet.");
+                return;
+            }
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                account = accounts[0];
+                document.getElementById('connect-btn').style.display = 'none';
+                document.getElementById('wallet-info').style.display = 'block';
+                document.getElementById('wallet-addr').textContent = account;
 
-  // ── Connect Flow ──
-  async function handleConnect() {
-    const btn = document.getElementById('btnConnect');
-    const status = document.getElementById('statusText');
-    const noWallet = document.getElementById('noWalletMsg');
+                // Get nonce for SiWE
+                const nonceRes = await fetch(`${API_BASE}/auth/nonce`);
+                const { nonce, domain } = await nonceRes.json();
+                const message = `agentsafe.io wants you to sign in with your Ethereum account:\n${account}\n\nSign in to agentsafe\n\nURI: ${window.location.origin}\nVersion: 1\nChain ID: 8453\nNonce: ${nonce}\n`;
 
-    if (!detectWallet()) {
-      noWallet.style.display = 'block';
-      return;
-    }
-    noWallet.style.display = 'none';
+                const signature = await window.ethereum.request({
+                    method: 'personal_sign',
+                    params: [account, message]
+                });
 
-    try {
-      // Step 1: Request accounts
-      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
-      const wallet = accounts[0].toLowerCase();
+                const signRes = await fetch(`${API_BASE}/auth/sign`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ address: account, signature, nonce, message })
+                });
+                const auth = await signRes.json();
+                localStorage.setItem('agentsafe_jwt', auth.token);
 
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> Signing...';
-      status.textContent = 'Please sign the message in your wallet...';
-      status.className = 'status-text';
+                loadStatus();
+            } catch (err) {
+                console.error(err);
+                alert("Connection failed: " + err.message);
+            }
+        }
 
-      // Step 2: Get nonce from server
-      const nonceResp = await fetch(`${API_BASE}/auth/nonce?wallet_address=${wallet}`);
-      if (!nonceResp.ok) throw new Error('Failed to get nonce');
-      const nonceData = await nonceResp.json();
+        async function loadStatus() {
+            const apiKey = localStorage.getItem('agentsafe_api_key');
+            const token = localStorage.getItem('agentsafe_jwt');
+            let authHeader = {};
+            if (apiKey) {
+                authHeader['Authorization'] = `Api-Key ${apiKey}`;
+            } else if (token) {
+                authHeader['Authorization'] = `Bearer ${token}`;
+            }
+            const res = await fetch(`${API_BASE}/v1/status`, { headers: authHeader });
+            const data = await res.json();
+            document.getElementById('budget-val').textContent = '$' + data.budget_remaining?.toFixed(2) || '0.00';
+            document.getElementById('merkle-root').textContent = data.merkle_root || '—';
+            document.getElementById('session-id').textContent = data.session_id || '';
+            const statusEl = document.getElementById('session-status');
+            if (data.status === 'ACTIVE') {
+                statusEl.className = 'status active';
+                statusEl.textContent = 'ACTIVE';
+                document.getElementById('kill-btn').disabled = false;
+            } else {
+                statusEl.className = 'status inactive';
+                statusEl.textContent = 'INACTIVE';
+                document.getElementById('kill-btn').disabled = true;
+            }
 
-      // Step 3: Sign the message
-      const signature = await window.ethereum.request({
-        method: 'personal_sign',
-        params: [nonceData.message, wallet],
-      });
+            // Load audit
+            const auditRes = await fetch(`${API_BASE}/v1/audit`);
+            const audit = await auditRes.json();
+            document.getElementById('audit-log').textContent = JSON.stringify(audit.recent_logs || [], null, 2);
+        }
 
-      // Step 4: Verify signature and get JWT
-      const signResp = await fetch(`${API_BASE}/auth/sign`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ wallet_address: wallet, signature }),
-      });
+        async function killSwitch() {
+            if (!confirm('Are you sure? This will kill the agent session.')) return;
+            const apiKey = localStorage.getItem('agentsafe_api_key');
+            const token = localStorage.getItem('agentsafe_jwt');
+            let authHeader = {};
+            if (apiKey) {
+                authHeader['Authorization'] = `Api-Key ${apiKey}`;
+            } else if (token) {
+                authHeader['Authorization'] = `Bearer ${token}`;
+            }
+            await fetch(`${API_BASE}/v1/kill`, { method: 'POST', headers: authHeader });
+            loadStatus();
+        }
 
-      if (!signResp.ok) {
-        const err = await signResp.json();
-        throw new Error(err.detail || 'Signature verification failed');
-      }
-
-      const signData = await signResp.json();
-      currentToken = signData.token;
-      currentWallet = wallet;
-
-      // Success
-      status.textContent = '✅ Connected!';
-      status.className = 'status-text success';
-
-      setTimeout(() => showDashboard(), 500);
-
-    } catch (err) {
-      console.error(err);
-      status.textContent = `❌ ${err.message}`;
-      status.className = 'status-text error';
-      btn.disabled = false;
-      btn.innerHTML = `
-        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-          <rect x="2" y="5" width="16" height="12" rx="2" stroke="#fff" stroke-width="1.5"/>
-          <path d="M2 9h16" stroke="#fff" stroke-width="1.5"/>
-          <circle cx="6" cy="7" r="0.8" fill="#fff"/>
-        </svg>
-        Connect Wallet`;
-    }
-  }
-
-  // ── Show Dashboard ──
-  function showDashboard() {
-    document.getElementById('loginCard').style.display = 'none';
-    document.getElementById('dashboard').classList.add('active');
-
-    // Update header pill
-    const pill = document.getElementById('walletPill');
-    pill.classList.add('active');
-    document.getElementById('walletShort').textContent =
-      currentWallet.slice(0, 6) + '...' + currentWallet.slice(-4);
-
-    refreshStatus();
-  }
-
-  // ── Refresh Dashboard Data ──
-  async function refreshStatus() {
-    if (!currentToken) return;
-
-    try {
-      const [statusResp, balanceResp] = await Promise.all([
-        fetch(`${API_BASE}/v1/status`, {
-          headers: { 'Authorization': `Bearer ${currentToken}` },
-        }),
-        fetch(`${API_BASE}/v1/usdc-balance`, {
-          headers: { 'Authorization': `Bearer ${currentToken}` },
-        }),
-      ]);
-
-      if (statusResp.ok) {
-        const data = await statusResp.json();
-        document.getElementById('statBudget').textContent = `$${data.daily_budget}`;
-        document.getElementById('statSpent').textContent = `$${data.spent_today}`;
-        document.getElementById('statStatus').textContent = data.kill_switch ? 'KILLED' : 'ACTIVE';
-        document.getElementById('statStatus').className =
-          'value ' + (data.kill_switch ? 'error' : 'success');
-      }
-
-      if (balanceResp.ok) {
-        const bdata = await balanceResp.json();
-        document.getElementById('statBalance').textContent = `$${bdata.usdc_balance.toFixed(2)}`;
-      }
-    } catch (err) {
-      console.error('Refresh failed:', err);
-    }
-  }
-
-  // ── Kill Switch ──
-  async function handleKill() {
-    if (!confirm('⚠️ This will STOP all agent spending immediately. Continue?')) return;
-
-    try {
-      const resp = await fetch(`${API_BASE}/v1/kill`, {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${currentToken}` },
-      });
-      if (resp.ok) {
-        alert('🛑 Kill switch activated!');
-        refreshStatus();
-      }
-    } catch (err) {
-      alert('Failed: ' + err.message);
-    }
-  }
-
-  // ── Disconnect ──
-  function handleDisconnect() {
-    currentToken = null;
-    currentWallet = null;
-    document.getElementById('loginCard').style.display = 'block';
-    document.getElementById('dashboard').classList.remove('active');
-    document.getElementById('walletPill').classList.remove('active');
-    document.getElementById('statusText').textContent = '';
-
-    const btn = document.getElementById('btnConnect');
-    btn.disabled = false;
-    btn.innerHTML = `
-      <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-        <rect x="2" y="5" width="16" height="12" rx="2" stroke="#fff" stroke-width="1.5"/>
-        <path d="M2 9h16" stroke="#fff" stroke-width="1.5"/>
-        <circle cx="6" cy="7" r="0.8" fill="#fff"/>
-      </svg>
-      Connect Wallet`;
-  }
-</script>
+        // Auto-refresh every 5s
+        setInterval(loadStatus, 5000);
+    </script>
 </body>
 </html>

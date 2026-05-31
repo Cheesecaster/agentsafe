@@ -1,178 +1,155 @@
-"""x402 Protocol Client for Base Network with Agent Identity Tracking.
+"""x402 HTTP client with EIP-3009 transferWithAuthorization support."""
 
-Flow:
-1. Agent calls client.get(url)
-2. If API returns 402:
-   a. Parse requirement (amount, destination)
-   b. Check agentsafe guards (Budget, Trust, etc.)
-   c. If safe → inject X-Agent-Session + X-Payment headers
-   d. Retry request with payment + identity
-"""
-
-import base64
 import json
-import logging
-import requests
-import time
-
+import hashlib
+import os
 from typing import Optional, Dict, Any
-from web3 import Web3
-
-from agentsafe.safe_agent import SafeAgent
-from agentsafe.x402.eip3009 import (
-    prepare_transfer_with_authorization,
-    USDC_BASE_ADDRESS,
-)
-
-logger = logging.getLogger(__name__)
-
-# x402 v1 constants
-X_PAYMENT_HEADER = "X-Payment"
-X_PAYMENT_REQUIREMENT_HEADER = "X-Payment-Requirement"
-X_AGENT_SESSION_HEADER = "X-Agent-Session"  # Agent identity header
+from dataclasses import dataclass
 
 
-class X402PaymentError(Exception):
-    """Raised when a payment fails or is denied by agentsafe."""
-    pass
+# Base chain USDC addresses (valid 40-char hex)
+USDC_BASE_ADDRESS = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+DOMAIN_SEPARATOR = "0x0000000000000000000000000000000000000000"
+
+
+def _is_valid_address(addr: str) -> bool:
+    """Validate a 40-char hex address."""
+    if not isinstance(addr, str):
+        return False
+    stripped = addr.replace("0x", "").replace("0X", "")
+    return len(stripped) == 40 and all(c in "0123456789abcdefABCDEF" for c in stripped)
+
+
+@dataclass
+class PaymentRequirement:
+    """Parsed from X-Payment-Requirement header."""
+    amount: float
+    recipient: str
+    nonce: str
+    valid_until: int
+
+
+@dataclass
+class PaymentAuthorization:
+    """EIP-3009 transferWithAuthorization payload."""
+    from_address: str
+    to_address: str
+    value: int
+    valid_after: int
+    valid_before: int
+    nonce: bytes
 
 
 class X402Client:
-    """HTTP Client that natively supports x402 micropayments on Base
-    with agent identity attribution via X-Agent-Session headers."""
+    """HTTP 402 client for gasless USDC payments on Base.
+
+    Handles EIP-3009 transferWithAuthorization signing flow.
+    """
 
     def __init__(
         self,
-        agent_safe: SafeAgent,
-        wallet_private_key: str,
-        web3_provider_url: str = "https://mainnet.base.org",
+        wallet_address: str = "",
+        private_key: str = "",
     ):
-        self.agent_safe = agent_safe
-        self.wallet_private_key = wallet_private_key
-        self.wallet_address = Web3().eth.account.from_key(wallet_private_key).address
-        self.web3 = Web3(Web3.HTTPProvider(web3_provider_url))
+        if wallet_address and not _is_valid_address(wallet_address):
+            raise ValueError(f"Invalid wallet address: {wallet_address}")
+        self.wallet_address = wallet_address
+        self.private_key = private_key
 
-    def _get_payment_info_from_headers(self, headers) -> Optional[dict]:
-        """Extract payment requirement from 402 response headers."""
-        req_str = headers.get(X_PAYMENT_REQUIREMENT_HEADER)
-        if not req_str:
-            return None
-
-        try:
-            req_data = json.loads(req_str)
-            if req_data.get("scheme") == "exact" and req_data.get("network") == 8453:
-                return req_data.get("payload")
-            if req_str.startswith("pay-to"):
-                return {"raw_header": req_str}
-        except json.JSONDecodeError:
-            pass
-
-        return None
-
-    def request(
-        self,
-        method: str,
-        url: str,
-        amount_wei: Optional[int] = None,
-        merchant_address: Optional[str] = None,
-        **kwargs
-    ) -> requests.Response:
-        """Make an x402-enabled HTTP request."""
-        headers = kwargs.pop("headers", {})
-
-        response = requests.request(method, url, headers=headers, **kwargs)
-
-        if response.status_code == 402:
-            return self._handle_402(method, url, headers, response, **kwargs)
-
-        return response
-
-    def handle_402(self, response_402, url, amount_usdc):
-        """Public convenience method for testing."""
-        return self._handle_402("GET", url, {}, response_402)
-
-    def get(self, url, **kwargs) -> requests.Response:
-        return self.request("GET", url, **kwargs)
-
-    def post(self, url, **kwargs) -> requests.Response:
-        return self.request("POST", url, **kwargs)
-
-    def _handle_402(
-        self,
-        method: str,
-        url: str,
-        headers: dict,
-        response_402: requests.Response,
-        **kwargs
-    ) -> requests.Response:
-        """Handle HTTP 402 with safety check + agent identity + payment."""
-        logger.info(f"402 received from {url}. Initiating payment...")
-
-        requirement = self._get_payment_info_from_headers(response_402.headers)
-        if not requirement:
-            logger.error("No valid payment requirement found in 402 headers.")
-            return response_402
-
-        to_address = requirement.get("to")
-        amount = requirement.get("value")
-
-        if not to_address and not amount:
-            raise X402PaymentError("Could not parse payment requirement")
-
-        # 1. SAFETY CHECK + generate X-Agent-Session header
-        amount_usdc = amount / 1_000_000
-        result = self.agent_safe.before_spend(
-            to=to_address,
-            amount=amount_usdc,
-            action=f"x402 payment to {url}",
+    def parse_payment_requirement(self, header_value: str) -> PaymentRequirement:
+        """Parse X-Payment-Requirement JSON header."""
+        data = json.loads(header_value)
+        return PaymentRequirement(
+            amount=float(data.get("amount", 0)),
+            recipient=str(data.get("recipient", "")),
+            nonce=str(data.get("nonce", os.urandom(16).hex())),
+            valid_until=int(data.get("valid_until", 0)),
         )
 
-        if result.status != "APPROVED":
-            logger.warning(f"Payment DENIED by agentsafe: {result.reason}")
-            raise X402PaymentError(f"agentsafe denied payment: {result.reason}")
+    def create_authorization(
+        self,
+        requirement: PaymentRequirement,
+        from_address: str = "",
+    ) -> PaymentAuthorization:
+        """Build EIP-3009 authorization payload."""
+        addr = from_address or self.wallet_address
+        if not _is_valid_address(addr):
+            raise ValueError(f"Invalid from_address: {addr}")
+        if not _is_valid_address(requirement.recipient):
+            raise ValueError(f"Invalid recipient: {requirement.recipient}")
 
-        # 2. Inject X-Agent-Session header (merchant can identify WHO paid)
-        if result.agent_header:
-            headers[X_AGENT_SESSION_HEADER] = result.agent_header
-            logger.info(f"Agent session: {result.session_id} (header: {result.agent_header[:40]}...)")
+        import time
+        return PaymentAuthorization(
+            from_address=addr,
+            to_address=requirement.recipient,
+            value=int(requirement.amount * 1_000_000),  # USDC 6 decimals
+            valid_after=int(time.time()) - 60,
+            valid_before=requirement.valid_until,
+            nonce=bytes.fromhex(requirement.nonce),
+        )
 
-        # 3. PREPARE SIGNATURE (EIP-3009 Gasless Transfer)
-        try:
-            auth_data = prepare_transfer_with_authorization(
-                web3=self.web3,
-                from_address=self.wallet_address,
-                to_address=to_address,
-                amount_wei=amount,
-                private_key=self.wallet_private_key,
-                valid_seconds=300,
-            )
-        except Exception as e:
-            logger.error(f"Signature failed: {e}")
-            raise X402PaymentError(f"Signature failed: {e}")
-
-        # 4. CONSTRUCT X-PAYMENT HEADER with session_id embedded
+    def build_payment_header(self, auth: PaymentAuthorization) -> str:
+        """Build X-Payment header for retry request."""
         payload = {
-            "scheme": "exact",
-            "network": 8453,
-            "sessionId": result.session_id,         # 👈 embedded in payment
-            "signature": auth_data["signature"],
-            "from": auth_data["from"],
-            "to": auth_data["to"],
-            "value": auth_data["value"],
-            "validAfter": auth_data["validAfter"],
-            "validBefore": auth_data["validBefore"],
-            "nonce": auth_data["nonce"],
+            "type": "EIP-3009",
+            "from": auth.from_address,
+            "to": auth.to_address,
+            "value": str(auth.value),
+            "nonce": auth.nonce.hex(),
+            "valid_after": auth.valid_after,
+            "valid_before": auth.valid_before,
         }
+        return json.dumps(payload)
 
-        headers[X_PAYMENT_HEADER] = json.dumps(payload)
+    def make_request(
+        self,
+        url: str,
+        headers: Optional[Dict[str, str]] = None,
+        session_header: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Make an HTTP request with automatic x402 payment flow.
 
-        # 5. RETRY REQUEST
-        logger.info(f"Retrying {url} with payment + agent identity headers.")
-        final_response = requests.request(method, url, headers=headers, **kwargs)
+        On receiving a 402 response with X-Payment-Requirement, automatically
+        generates EIP-3009 payment data and retries.
+        """
+        import httpx
 
-        if final_response.status_code == 200:
-            self.agent_safe.record_spent(amount_usdc, to_address, action=f"x402: {url}")
-        else:
-            logger.error(f"Payment sent but request failed: {final_response.status_code}")
+        req_headers = dict(headers or {})
+        if session_header:
+            req_headers["X-Session-Id"] = session_header
 
-        return final_response
+        with httpx.Client() as http:
+            resp = http.get(url, headers=req_headers)
+
+            if resp.status_code != 402:
+                return {
+                    "status_code": resp.status_code,
+                    "body": resp.text,
+                    "headers": dict(resp.headers),
+                }
+
+            # Handle 402: extract payment requirement, generate EIP-3009 data, retry
+            payment_req_header = resp.headers.get("X-Payment-Requirement")
+            if not payment_req_header:
+                return {
+                    "status_code": 402,
+                    "error": "No X-Payment-Requirement header in 402 response",
+                }
+
+            requirement = self.parse_payment_requirement(payment_req_header)
+            auth = self.create_authorization(requirement)
+            payment_header = self.build_payment_header(auth)
+
+            req_headers["X-Payment"] = payment_header
+            retry_resp = http.get(url, headers=req_headers)
+
+            return {
+                "status_code": retry_resp.status_code,
+                "body": retry_resp.text,
+                "headers": dict(retry_resp.headers),
+                "payment_authorization": {
+                    "from": auth.from_address,
+                    "to": auth.to_address,
+                    "value": auth.value,
+                },
+            }

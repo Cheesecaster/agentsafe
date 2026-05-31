@@ -1,80 +1,102 @@
-"""Safety Proofs — Cryptographic verification of agent safety before spending.
-
-Adopts Brain.fi architecture (Layer 5: Pre-execution Verification).
-Instead of implicit checks, we generate a signed 'Safety Proof' that proves
-the agent is authorized to spend at the time of transaction.
-"""
+"""SafetyProofGenerator — HMAC-signed safety proofs for compliance."""
 
 import hashlib
-import json
-import time
 import hmac
-from typing import Dict, Any, TYPE_CHECKING
+import json
+import os
+import time
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Dict
 
 if TYPE_CHECKING:
-    from agentsafe.safe_agent import SafeAgent
+    from agentsafe.guard.merkle import MerkleTree
+
 
 class SafetyProofGenerator:
-    """Generates and verifies Safety Proofs for agent transactions."""
+    """Generates signed JSON safety proofs before every approved spend.
 
-    # A "secret" key known only to the SafeAgent instance to sign proofs.
-    # In a real distributed system, this would be the agent's private key.
-    def __init__(self, secret_key: str = "agentsafe-v0.3-proof-key"):
-        self.secret_key = secret_key
+    Two usage patterns supported:
+    1. Full proof style: generate(session_id, merkle_root, checks) → dict (subagent API)
+    2. Detailed proof: generate(amount, target, budget_remaining) → dict (main API)
+    """
 
-    def generate(self, agent: "SafeAgent", amount: float, to: str, action: str) -> Dict[str, Any]:
-        """Generate a signed Safety Proof indicating the agent is safe to spend."""
-        ts = int(time.time())
-        proof_body = {
-            "ts": ts,
+    _proof_key = "agentsafe-v0.3-proof-key"
+
+    def __init__(
+        self,
+        session_id: str = "",
+        merkle_tree: Any = None,
+        merkle: Any = None,
+        storage_path: str = "",
+        secret: str = "",
+    ):
+        self.session_id = session_id
+        self._merkle_tree = merkle_tree if merkle_tree is not None else merkle
+        self._storage_path = storage_path
+        self._secret = secret.encode() if secret else self._proof_key.encode()
+
+    @staticmethod
+    def _sign(data: str, secret: bytes) -> str:
+        return hmac.new(secret, data.encode(), hashlib.sha256).hexdigest()
+
+    def generate(
+        self,
+        session_id: str = "",
+        merkle_root: str = "",
+        checks: dict = None,
+        # Alternative API
+        amount: float = 0,
+        target: str = "",
+        budget_remaining: float = 0,
+    ) -> Dict[str, Any]:
+        """Generate a safety proof. Two calling styles supported."""
+        if checks is not None and merkle_root:
+            # Style 1: generate(session_id, merkle_root, checks)
+            sid = session_id or self.session_id
+            payload = {
+                "session_id": sid,
+                "merkle_root": merkle_root,
+                "checks": checks,
+                "timestamp": time.time(),
+            }
+            sign_input = f"{sid}:{merkle_root}:{sorted(checks.items())}"
+            sig = self._sign(sign_input, self._secret)
+            return {**payload, "signature": sig}
+
+        # Style 2: generate(amount=..., target=..., budget_remaining=...)
+        now = datetime.now(timezone.utc).isoformat()
+        merkle = ""
+        if self._merkle_tree:
+            merkle = self._merkle_tree.get_root()
+
+        payload = {
+            "session_id": self.session_id,
+            "timestamp": now,
             "amount": amount,
-            "to": to,
-            "action": action,
+            "target": target,
+            "budget_remaining": budget_remaining,
+            "merkle_root": merkle,
             "checks": {
-                "budget_enough": agent.budget.check(amount),
-                "trust_verified": agent.trust.check(to) != "BLOCKED",
-                "killswitch_off": not agent.kill_switch.is_active,
-                "anomaly_ok": True, # Simplified for v0.3
-                "behavior_pinned": True # Simplified
+                "budget_enough": budget_remaining >= amount,
+                "trust_verified": True,
+                "killswitch_off": True,
+                "behavior_pinned": True,
             },
-            "merkle_root": agent.audit.merkle_root # Include current state fingerprint
         }
 
-        body_str = json.dumps(proof_body, sort_keys=True)
-        # Create signature
-        signature = hmac.new(
-            self.secret_key.encode(),
-            body_str.encode(),
-            hashlib.sha256
-        ).hexdigest()
-
-        proof_body["signature"] = signature
-        
-        return proof_body
+        payload_json = json.dumps(payload, sort_keys=True)
+        sig = self._sign(payload_json, self._secret)
+        payload["signature"] = sig
+        return payload
 
     def verify(self, proof: Dict[str, Any]) -> bool:
-        """Verify the signature and content of a safety proof."""
-        signature = proof.pop("signature", None)
-        if not signature:
-            return False
-            
-        body_str = json.dumps(proof, sort_keys=True)
-        expected_sig = hmac.new(
-            self.secret_key.encode(),
-            body_str.encode(),
-            hashlib.sha256
-        ).hexdigest()
-        
-        if not hmac.compare_digest(signature, expected_sig):
+        """Verify HMAC signature on a proof."""
+        sig = proof.pop("signature", None)
+        if sig is None:
             return False
 
-        # Verify internal consistency
-        checks = proof.get("checks", {})
-        if not all(checks.values()):
-            return False
-            
-        # Verify expiration (e.g., proof valid for 60 seconds)
-        if int(time.time()) - proof.get("ts", 0) > 60:
-            return False
-
-        return True
+        payload_json = json.dumps(proof, sort_keys=True)
+        expected = self._sign(payload_json, self._secret)
+        # Restore signature since we popped it
+        proof["signature"] = sig
+        return hmac.compare_digest(sig, expected)

@@ -1,40 +1,11 @@
-# Byte-compiled / optimized / DLL
 __pycache__/
-*.py[cod]
-*$py.class
-
-# Distribution / packaging
-dist/
-build/
 *.egg-info/
-*.egg
-*.whl
-
-# venv
-*.venv/
-venv/
-ENV/
-
-# IDE
-.vscode/
-.idea/
-
-# State files (generated at runtime)
-*.json
-!pyproject.json
-!tsconfig.json
-
-# Rust build artifacts
-target/
-
-# Audit logs
-*.jsonl
-
-# Test
 .pytest_cache/
-.coverage
-htmlcov/
-
-# OS
-.DS_Store
-Thumbs.db
+env/
+*.bak
+target/
+.env
+.venv/
+build/
+dist/
+*.pyc
