@@ -24,6 +24,9 @@ ENV/
 !pyproject.json
 !tsconfig.json
 
+# Rust build artifacts
+target/
+
 # Audit logs
 *.jsonl
 
