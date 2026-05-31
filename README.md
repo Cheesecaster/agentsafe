@@ -16,15 +16,17 @@ It provides **budget caps, trust verification, anomaly detection, and cryptograp
 
 Built for the **Base Agent Economy**.
 
-## 🚀 The Problem: Agent Economics are Unsafe
-AI Agents are getting wallets, but they lack **financial impulse control**.
-- 📉 **Runaway Spend**: An agent loops 1,000 API calls and drains the wallet in seconds.
-- 🐛 **Prompt Injection**: Malicious inputs trick agents into transferring funds to attackers.
-- 📝 **No Recourse**: No human-readable audit logs for agent spending. No Kill Switch.
+## 🚀 The Philosophy: Every Base MCP Agent Needs Its Own Wallet
+Base is pushing a future where **every AI Agent has its own on-chain identity and wallet**.
+This is powerful, but dangerous without safety rails:
+- 🐇 **True Autonomy**: Agents should pay for their own compute/data via x402 without asking permission for every $0.05.
+- 🛑 **The "Runaway" Risk**: An agent with a wallet and no limits is a liability. One loop error = drained funds. One prompt injection = stolen assets.
+- 🕳️ **The Gap**: Giving an agent a wallet is easy. Giving it **financial discipline** is hard.
 
-**Agentsafe** is the "seatbelt" for the Agent Economy. It allows agents to remain autonomous while enforcing strict, cryptographically verifiable safety boundaries defined by the owner.
+**`agentsafe` bridges this gap.** 
+It provides the **safety kit** that makes independent Agent Wallets viable for production. We ensure agents stay within budget, behave normally, and can be stopped instantly—so developers can trust their MCP agents to transact autonomously on Base.
 
-## 🛡️ Core Architecture
+## 🛡️ Architecture
 
 We blend **Python flexibility** with **Rust performance** and **Solidity enforcement**.
 
